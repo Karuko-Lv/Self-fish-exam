@@ -4,8 +4,9 @@
 
 Rewrite Self-fish as a Vue 3 application while preserving all existing features
 and current single-user data compatibility. Add real account login and
-per-user cloud sync so two people can use the same deployed app with isolated
-data, while leaving a clean path to support more users later. The new interface
+per-user cloud sync so two people can open the same deployed web link from
+multiple devices, log in, and see their own isolated study data, while leaving
+a clean path to support more users later. The new interface
 should keep the current full-page pink Hello Kitty style, make daily study
 actions easier to reach, and improve maintainability by replacing direct DOM
 manipulation with Vue components and composables.
@@ -52,6 +53,12 @@ accounts can be added later without changing the frontend data model. Public
 registration is intentionally out of scope. Accounts are created by server
 configuration or a server-side account file, not by an open signup page.
 
+The app is expected to run on a cloud server with a public HTTPS URL. Users
+should be able to open that link from a phone, tablet, or computer, log in, and
+continue from the same server-backed data. LocalStorage is only a fast local
+cache and offline fallback; the server is the source of truth for multi-device
+sync after login.
+
 Authentication behavior:
 
 - Show a pink Hello Kitty themed login screen before loading private study
@@ -68,6 +75,8 @@ Data isolation:
 - Each account has its own state object and storage file.
 - Existing `/api/state` remains the frontend sync contract, but it reads and
   writes the state for the current logged-in user.
+- Every device logged into the same account syncs through that user's server
+  state file.
 - A suggested storage shape is `data/users/<userId>/state.json` plus a
   `data/users.json` account file, or equivalent environment-driven config for
   deployment.
@@ -196,6 +205,8 @@ date checks, and Done List grouping.
 
 - If server sync fails, continue in localStorage mode and show a non-blocking
   toast.
+- After reconnecting or refreshing on another device, the latest server state
+  should load for the logged-in account.
 - If the session expires, stop server writes, keep unsaved local changes under
   the current user's scoped localStorage key, and ask the user to log in again.
 - Login errors should not reveal whether the username or password was wrong.
@@ -222,6 +233,8 @@ Manual browser verification should cover desktop and mobile widths:
 
 - Login and logout
 - Switching between the two configured accounts without data leakage
+- Opening the deployed URL from two devices or browser profiles and confirming
+  same-account data sync
 - Navigation between all views
 - Add/delete flows for each log type
 - Timer start, pause, reset, and complete

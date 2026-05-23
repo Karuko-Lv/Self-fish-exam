@@ -4,7 +4,7 @@ import CountdownsView from "../views/CountdownsView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import DistractionsView from "../views/DistractionsView.vue";
 import IdeasView from "../views/IdeasView.vue";
-import MistakesView from "../views/MistakesView.vue";
+import KnowledgeReviewView from "../views/KnowledgeReviewView.vue";
 import PracticeView from "../views/PracticeView.vue";
 import SentencesView from "../views/SentencesView.vue";
 import SettingsView from "../views/SettingsView.vue";
@@ -34,7 +34,7 @@ const navItems = [
   ["sentences", "长难句", "句"],
   ["timer", "番茄钟", "◷"],
   ["distractions", "分心记录", "☆"],
-  ["mistakes", "错题复盘", "!"],
+  ["knowledgeReviews", "知识点复盘", "!"],
   ["ideas", "灵感停车场", "+"],
   ["review", "周复盘", "∑"],
   ["settings", "设置", "⚙"],
@@ -50,7 +50,7 @@ const currentComponent = computed(
       sentences: SentencesView,
       timer: TimerView,
       distractions: DistractionsView,
-      mistakes: MistakesView,
+      knowledgeReviews: KnowledgeReviewView,
       ideas: IdeasView,
       review: WeeklyReviewView,
       settings: SettingsView,

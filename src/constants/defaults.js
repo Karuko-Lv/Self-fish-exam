@@ -24,7 +24,7 @@ export const statusList = [
   { id: "review", label: "复盘", score: 3 },
 ];
 
-export const mistakeCauses = ["概念不清", "公式不会", "题意误判", "粗心", "时间不够", "知识迁移失败"];
+export const knowledgeReviewCauses = ["概念不清", "公式不会", "题意误判", "粗心", "时间不够", "知识迁移失败"];
 
 export const distractionTypes = {
   idea: "新想法",

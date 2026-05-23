@@ -1,5 +1,5 @@
 import { computed, reactive, ref, watch } from "vue";
-import { moodTaskTemplates, subjects } from "../constants/defaults.js";
+import { subjects } from "../constants/defaults.js";
 import { daysUntil, startOfWeek, studyDayISO, todayISO } from "../utils/dates.js";
 import { localStorageKeyForUser, normalizeState, uid } from "../utils/state.js";
 
@@ -126,14 +126,46 @@ export function useSelfFishState(user, showToast) {
   }
 
   function applyMoodTasks() {
-    const templates = moodTaskTemplates[state.selectedMood] || moodTaskTemplates.anxious;
     const weakSubject = findWeakSubject();
-    const generated = templates.map(([level, title, detail], index) => ({
+    const profiles = {
+      clear: {
+        base: ["热身保底", 25, "先复盘 1 道错题，让今天进入状态。"],
+        standard: ["主线推进", 90, "挑一个薄弱点，看讲义后做 8 道题。"],
+        burst: ["高压复盘", 150, "整理近 7 天错因，找出最该修的一类。"],
+      },
+      anxious: {
+        base: ["落地保底", 20, "只做一道题，从题干里圈关键条件。"],
+        standard: ["低速主线", 50, "看 20 分钟讲义，再做 5 道基础题。"],
+        burst: ["稳定加码", 90, "完成一组错题二刷，不追求速度。"],
+      },
+      slump: {
+        base: ["桌面重启", 15, "整理学习区 5 分钟，再看一道旧题。"],
+        standard: ["只背一张卡", 30, "选一个概念，用自己的话写 3 句。"],
+        burst: ["轻量回主线", 60, "画一张小框架，把不稳点圈出来。"],
+      },
+      excited: {
+        base: ["先接主线", 25, "完成一个 408 小点，再处理灵感。"],
+        standard: ["热度推进", 90, "把兴奋接到一节主线和一组题上。"],
+        burst: ["冲刺训练", 120, "计时训练，结束后只记录三个错因。"],
+      },
+      tired: {
+        base: ["轻复盘", 20, "看 3 道错题，说出为什么错。"],
+        standard: ["框架补洞", 45, "画一张科目小地图，把不稳点标出来。"],
+        burst: ["慢速整合", 80, "只做一类题，避免跨科跳来跳去。"],
+      },
+      lost: {
+        base: ["找下一步", 20, "打开全科进度，选一个“错多”点做 20 分钟。"],
+        standard: ["单点突破", 60, "只抓一个知识点，不跨科，不扩展。"],
+        burst: ["复盘收束", 100, "把今天最模糊的点整理成一页笔记。"],
+      },
+    };
+    const profile = profiles[state.selectedMood] || profiles.anxious;
+    const generated = Object.entries(profile).map(([level, [title, minutes, detail]]) => ({
       id: uid("task"),
       level,
       title,
       subject: weakSubject,
-      minutes: level === "base" ? 25 : level === "standard" ? 60 : 120,
+      minutes,
       detail,
       done: false,
     }));
@@ -147,16 +179,33 @@ export function useSelfFishState(user, showToast) {
   }
 
   function addFocusLog(payload) {
+    const minutes = payload.minutes ?? minutesBetween(payload.startTime, payload.endTime);
     state.focusLogs.unshift({
       id: uid("focus"),
       date: today.value,
       createdAt: new Date().toISOString(),
       ...payload,
+      minutes,
     });
   }
 
   function deleteById(collection, id) {
     state[collection] = state[collection].filter((item) => item.id !== id);
+  }
+
+  function updateById(collection, id, patch) {
+    const item = state[collection]?.find((entry) => entry.id === id);
+    if (!item) return;
+    Object.assign(item, patch);
+  }
+
+  function minutesBetween(startTime, endTime) {
+    if (!startTime || !endTime) return 0;
+    const [startHour, startMinute] = startTime.split(":").map(Number);
+    const [endHour, endMinute] = endTime.split(":").map(Number);
+    let minutes = endHour * 60 + endMinute - (startHour * 60 + startMinute);
+    if (minutes < 0) minutes += 24 * 60;
+    return Math.max(0, minutes);
   }
 
   function addCountdown(payload) {
@@ -176,6 +225,10 @@ export function useSelfFishState(user, showToast) {
     const event = state.countdownEvents.find((item) => item.id === eventId);
     const todo = event?.todos?.find((item) => item.id === todoId);
     if (todo) todo.done = !todo.done;
+  }
+
+  function updateCountdown(eventId, patch) {
+    updateById("countdownEvents", eventId, patch);
   }
 
   function updateTopicStatus(subjectId, topicId, status) {
@@ -225,9 +278,9 @@ export function useSelfFishState(user, showToast) {
     if (item) item.done = !item.done;
   }
 
-  function addMistake(payload) {
-    state.mistakes.unshift({
-      id: uid("mistake"),
+  function addKnowledgeReview(payload) {
+    state.knowledgeReviews.unshift({
+      id: uid("knowledge-review"),
       date: today.value,
       createdAt: new Date().toISOString(),
       reviewed: false,
@@ -235,8 +288,8 @@ export function useSelfFishState(user, showToast) {
     });
   }
 
-  function toggleMistakeReviewed(id) {
-    const item = state.mistakes.find((mistake) => mistake.id === id);
+  function toggleKnowledgeReviewReviewed(id) {
+    const item = state.knowledgeReviews.find((review) => review.id === id);
     if (item) item.reviewed = !item.reviewed;
   }
 
@@ -299,15 +352,15 @@ export function useSelfFishState(user, showToast) {
     });
     const topSubject = Object.entries(bySubject).sort((a, b) => b[1] - a[1])[0]?.[0];
     const causes = {};
-    state.mistakes.forEach((mistake) => {
-      causes[mistake.cause] = (causes[mistake.cause] || 0) + 1;
+    state.knowledgeReviews.forEach((review) => {
+      causes[review.cause] = (causes[review.cause] || 0) + 1;
     });
     const topCause = Object.entries(causes).sort((a, b) => b[1] - a[1])[0]?.[0];
     return {
       minutes,
       topSubject: topSubject ? subjectName(topSubject) : "--",
       topCause: topCause || "--",
-      nextFocus: topCause || "错题复盘",
+      nextFocus: topCause || "知识点复盘",
     };
   });
 
@@ -348,16 +401,19 @@ export function useSelfFishState(user, showToast) {
     applyMoodTasks,
     toggleTask,
     addFocusLog,
+    updateById,
+    minutesBetween,
     addCountdown,
     toggleCountdownTodo,
+    updateCountdown,
     updateTopicStatus,
     addPracticeLog,
     addSentenceLog,
     addPomodoroLog,
     addDistraction,
     toggleDistraction,
-    addMistake,
-    toggleMistakeReviewed,
+    addKnowledgeReview,
+    toggleKnowledgeReviewReviewed,
     addIdea,
     convertIdeaToTask,
     deleteById,

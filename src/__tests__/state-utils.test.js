@@ -39,4 +39,32 @@ describe("state utilities", () => {
       { id: "exam-todo-1", text: "背作文模板", done: false },
     ]);
   });
+
+  it("migrates old mistakes into knowledge reviews", () => {
+    const state = normalizeState({
+      mistakes: [
+        {
+          id: "old-1",
+          subject: "ds",
+          topic: "二叉树遍历",
+          cause: "概念不清",
+          reviewDate: "2026-06-01",
+          summary: "递归边界没想清楚。",
+        },
+      ],
+    });
+
+    expect(state.mistakes).toBeUndefined();
+    expect(state.knowledgeReviews).toEqual([
+      expect.objectContaining({
+        id: "old-1",
+        subject: "ds",
+        topic: "二叉树遍历",
+        cause: "概念不清",
+        reviewDate: "2026-06-01",
+        summary: "递归边界没想清楚。",
+        reviewed: false,
+      }),
+    ]);
+  });
 });

@@ -1,9 +1,20 @@
 <script setup>
+import { computed } from "vue";
+import ExportActions from "../components/ExportActions.vue";
 import { statusList, subjects } from "../constants/defaults.js";
 
-defineProps({ fish: { type: Object, required: true } });
+const props = defineProps({ fish: { type: Object, required: true } });
 
 const statusById = Object.fromEntries(statusList.map((status) => [status.id, status]));
+const exportRows = computed(() =>
+  subjects.flatMap((subject) =>
+    props.fish.state.topicState[subject.id].map((topic) => ({
+      科目: subject.name,
+      知识点: topic.name,
+      状态: statusById[topic.status]?.label || topic.status,
+    })),
+  ),
+);
 
 function nextStatusId(currentStatus) {
   const index = statusList.findIndex((status) => status.id === currentStatus);
@@ -15,8 +26,11 @@ function nextStatusId(currentStatus) {
   <section class="page-view">
     <div class="topbar">
       <div><p class="eyebrow">Map</p><h2>全科进度</h2></div>
-      <div class="status-legend">
-        <span v-for="s in statusList" :key="s.id" :class="`status-dot is-${s.id}`">{{ s.label }}</span>
+      <div class="topbar-actions">
+        <div class="status-legend">
+          <span v-for="s in statusList" :key="s.id" :class="`status-dot is-${s.id}`">{{ s.label }}</span>
+        </div>
+        <ExportActions title="全科进度" :payload="fish.state.topicState" :rows="exportRows" />
       </div>
     </div>
     <section class="panel progress-board">

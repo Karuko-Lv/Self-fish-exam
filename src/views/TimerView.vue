@@ -1,9 +1,12 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref } from "vue";
+import ExportActions from "../components/ExportActions.vue";
 import { breakSuggestions, timerSubjects } from "../constants/defaults.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
 const timer = reactive({ mode: "专注", direction: "down", seconds: 25 * 60, remaining: 25 * 60, running: false, note: "", subject: "ds" });
+const editingId = ref("");
+const editForm = reactive({ subject: "ds", minutes: 25, mode: "专注", note: "" });
 const breakIndex = ref(0);
 let interval = null;
 
@@ -13,6 +16,16 @@ const display = computed(() => {
   const seconds = value % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 });
+
+const exportRows = computed(() =>
+  props.fish.state.pomodoroLogs.map((log) => ({
+    日期: log.date,
+    科目: props.fish.subjectName(log.subject),
+    分钟: log.minutes,
+    模式: log.mode,
+    内容: log.note,
+  })),
+);
 
 function setPreset(minutes, mode) {
   timer.mode = mode;
@@ -51,12 +64,22 @@ function complete() {
   reset();
 }
 
+function startEdit(log) {
+  editingId.value = log.id;
+  Object.assign(editForm, { subject: log.subject, minutes: log.minutes, mode: log.mode, note: log.note });
+}
+
+function saveEdit(id) {
+  props.fish.updateById("pomodoroLogs", id, { ...editForm, minutes: Number(editForm.minutes) });
+  editingId.value = "";
+}
+
 onBeforeUnmount(() => window.clearInterval(interval));
 </script>
 
 <template>
   <section class="page-view">
-    <div class="topbar"><div><p class="eyebrow">Pomodoro</p><h2>番茄钟</h2></div><span class="metric-pill">今日 {{ fish.todayPomodoros.value }} 组计时</span></div>
+    <div class="topbar"><div><p class="eyebrow">Pomodoro</p><h2>番茄钟</h2></div><div class="topbar-actions"><span class="metric-pill">今日 {{ fish.todayPomodoros.value }} 组计时</span><ExportActions title="番茄钟记录" :payload="fish.state.pomodoroLogs" :rows="exportRows" /></div></div>
     <div class="timer-layout">
       <section class="panel timer-panel">
         <div class="timer-orb"><div class="timer-core"><span>{{ timer.mode }}</span><strong>{{ display }}</strong><small>小小鱼，先游一段。</small></div></div>
@@ -86,7 +109,16 @@ onBeforeUnmount(() => window.clearInterval(interval));
       </section>
       <section class="panel">
         <p class="panel-kicker">Sessions</p><h3>计时学习记录</h3>
-        <div class="item-list"><article v-for="log in fish.state.pomodoroLogs" :key="log.id" class="list-item"><div><strong>{{ fish.subjectName(log.subject) }}</strong><small>{{ log.minutes }} 分钟 · {{ log.mode }}</small><p>{{ log.note }}</p></div><button @click="fish.deleteById('pomodoroLogs', log.id)">删除</button></article></div>
+        <div class="item-list"><article v-for="log in fish.state.pomodoroLogs" :key="log.id" class="list-item">
+          <form v-if="editingId === log.id" class="inline-edit-form" @submit.prevent="saveEdit(log.id)">
+            <label>科目<select v-model="editForm.subject"><option v-for="s in timerSubjects" :key="s.id" :value="s.id">{{ s.name }}</option></select></label>
+            <label>分钟<input v-model.number="editForm.minutes" type="number" min="1" /></label>
+            <label>模式<input v-model="editForm.mode" maxlength="20" /></label>
+            <label class="wide-field">内容<input v-model="editForm.note" maxlength="60" /></label>
+            <div class="row-actions wide-field"><button class="primary-button">保存</button><button class="secondary-button" type="button" @click="editingId = ''">取消</button></div>
+          </form>
+          <template v-else><div><strong>{{ fish.subjectName(log.subject) }}</strong><small>{{ log.minutes }} 分钟 · {{ log.mode }}</small><p>{{ log.note }}</p></div><div class="row-actions"><button @click="startEdit(log)">编辑</button><button @click="fish.deleteById('pomodoroLogs', log.id)">删除</button></div></template>
+        </article></div>
       </section>
     </div>
   </section>

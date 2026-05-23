@@ -62,6 +62,26 @@ function normalizePromptCards(cards) {
     .filter((card) => card.text);
 }
 
+function normalizeKnowledgeReviews(input) {
+  const source = Array.isArray(input.knowledgeReviews)
+    ? input.knowledgeReviews
+    : Array.isArray(input.mistakes)
+      ? input.mistakes
+      : [];
+
+  return source.map((item, index) => ({
+    id: item.id || `knowledge-review-${index}`,
+    subject: item.subject || "ds",
+    topic: item.topic || "",
+    cause: item.cause || "概念不清",
+    reviewDate: item.reviewDate || todayISO(),
+    summary: item.summary || "",
+    reviewed: Boolean(item.reviewed),
+    date: item.date || todayISO(),
+    createdAt: item.createdAt || new Date().toISOString(),
+  }));
+}
+
 export function normalizeState(input = {}) {
   const topicState = {};
   subjects.forEach((subject) => {
@@ -99,7 +119,7 @@ export function normalizeState(input = {}) {
     focusLogs: Array.isArray(input.focusLogs) ? input.focusLogs : [],
     pomodoroLogs: Array.isArray(input.pomodoroLogs) ? input.pomodoroLogs : [],
     distractionLogs: Array.isArray(input.distractionLogs) ? input.distractionLogs : [],
-    mistakes: Array.isArray(input.mistakes) ? input.mistakes : [],
+    knowledgeReviews: normalizeKnowledgeReviews(input),
     ideas: Array.isArray(input.ideas) ? input.ideas : [],
     countdownEvents: normalizeCountdownEvents(
       Array.isArray(input.countdownEvents) && input.countdownEvents.length

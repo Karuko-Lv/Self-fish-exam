@@ -27,7 +27,7 @@ const emit = defineEmits(["logout"]);
 const activeView = ref("dashboard");
 
 const navItems = [
-  ["dashboard", "今日驾驶舱", "▣"],
+  ["dashboard", "今日泳池", "▣"],
   ["countdowns", "倒数日", "D"],
   ["map", "全科进度", "⌁"],
   ["practice", "刷题记录", "#"],

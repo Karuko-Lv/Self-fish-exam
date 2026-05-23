@@ -43,6 +43,19 @@ export const breakSuggestions = [
   "做一次颈部拉伸，回来直接点开始。",
 ];
 
+export const defaultPromptCards = [
+  { id: "pool-1", group: "dashboard", text: "先选一个最小动作，游起来比想清楚更重要。" },
+  { id: "pool-2", group: "dashboard", text: "今天不用赢很多，只要把主线接住。" },
+  { id: "pool-3", group: "dashboard", text: "记录不是审判，是给明天的自己留浮标。" },
+  { id: "countdown-1", group: "countdown", text: "把大日子拆成小勾选，压力会变轻一点。" },
+  { id: "countdown-2", group: "countdown", text: "每个节点只放 3 到 5 个 todo，完成感会更清楚。" },
+  { id: "map-1", group: "map", text: "先找红色和粉色块，它们就是下一轮最值钱的入口。" },
+  { id: "map-2", group: "map", text: "绿色不是终点，复盘过的绿色才更稳。" },
+  { id: "practice-1", group: "practice", text: "错题不是坏消息，它在告诉你哪里能最快涨分。" },
+  { id: "timer-1", group: "timer", text: "一颗番茄只需要一个目标，别让它背太多东西。" },
+  { id: "review-1", group: "review", text: "周复盘只抓一个主问题，下周才真的能变轻。" },
+];
+
 export const moods = [
   {
     id: "clear",

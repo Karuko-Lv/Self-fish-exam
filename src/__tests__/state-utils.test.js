@@ -19,5 +19,24 @@ describe("state utilities", () => {
     expect(state.practiceLogs).toEqual([]);
     expect(state.sentenceLogs).toEqual([]);
     expect(state.countdownEvents.length).toBeGreaterThan(0);
+    expect(state.promptCards.length).toBeGreaterThan(0);
+  });
+
+  it("migrates countdown notes into checkbox todos", () => {
+    const state = normalizeState({
+      countdownEvents: [
+        {
+          id: "exam",
+          title: "阶段复盘",
+          date: "2026-06-01",
+          note: "整理错题\n背作文模板",
+        },
+      ],
+    });
+
+    expect(state.countdownEvents[0].todos).toEqual([
+      { id: "exam-todo-0", text: "整理错题", done: false },
+      { id: "exam-todo-1", text: "背作文模板", done: false },
+    ]);
   });
 });

@@ -160,7 +160,22 @@ export function useSelfFishState(user, showToast) {
   }
 
   function addCountdown(payload) {
-    state.countdownEvents.push({ id: uid("countdown"), ...payload });
+    const id = uid("countdown");
+    state.countdownEvents.push({
+      id,
+      ...payload,
+      todos: (payload.todos || []).map((todo, index) => ({
+        id: todo.id || `${id}-todo-${index}`,
+        text: todo.text,
+        done: Boolean(todo.done),
+      })),
+    });
+  }
+
+  function toggleCountdownTodo(eventId, todoId) {
+    const event = state.countdownEvents.find((item) => item.id === eventId);
+    const todo = event?.todos?.find((item) => item.id === todoId);
+    if (todo) todo.done = !todo.done;
   }
 
   function updateTopicStatus(subjectId, topicId, status) {
@@ -296,6 +311,21 @@ export function useSelfFishState(user, showToast) {
     };
   });
 
+  const promptByGroup = computed(() => {
+    const groups = {};
+    state.promptCards.forEach((card) => {
+      if (!groups[card.group]) groups[card.group] = [];
+      groups[card.group].push(card);
+    });
+    return Object.fromEntries(
+      Object.entries(groups).map(([group, cards]) => [group, cards[Math.floor(Math.random() * cards.length)]]),
+    );
+  });
+
+  function promptFor(group) {
+    return promptByGroup.value[group]?.text || promptByGroup.value.dashboard?.text || "慢慢来，小小鱼也能游到岸边。";
+  }
+
   return {
     state,
     loaded,
@@ -308,6 +338,7 @@ export function useSelfFishState(user, showToast) {
     todayDistractions,
     todayMinutes,
     weekStats,
+    promptFor,
     initialize,
     subjectName,
     maybeResetDailyTasks,
@@ -318,6 +349,7 @@ export function useSelfFishState(user, showToast) {
     toggleTask,
     addFocusLog,
     addCountdown,
+    toggleCountdownTodo,
     updateTopicStatus,
     addPracticeLog,
     addSentenceLog,

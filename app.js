@@ -820,7 +820,7 @@
       });
       saveState();
       renderTasks();
-      showToast("重启任务已放到今日驾驶舱。");
+      showToast("重启任务已放到今日泳池。");
     });
 
     $("#writeReviewBtn").addEventListener("click", () => {
@@ -1840,7 +1840,7 @@
         });
         saveState();
         renderTasks();
-        showToast("已加入今日驾驶舱，但只给 30 分钟。");
+        showToast("已加入今日泳池，但只给 30 分钟。");
       });
     });
   }

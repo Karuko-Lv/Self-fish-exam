@@ -25,7 +25,7 @@ function submitFocus() {
     <div class="topbar">
       <div>
         <p class="eyebrow">Today</p>
-        <h2>还有 <span>{{ fish.daysLeft.value }}</span> 天，加油小小鱼</h2>
+        <h2>今日泳池 · 还有 <span>{{ fish.daysLeft.value }}</span> 天</h2>
       </div>
       <label class="date-box">
         目标日期
@@ -37,7 +37,7 @@ function submitFocus() {
       <section class="panel hero-panel">
         <p class="panel-kicker">距离目标</p>
         <div class="countdown"><strong>{{ fish.daysLeft.value }}</strong><span>天</span></div>
-        <p class="daily-line">今天只要往前游一点点，也算数。</p>
+        <p class="daily-line">{{ fish.promptFor('dashboard') }}</p>
         <div class="hero-stats">
           <div><strong>{{ fish.todayPractice.value }}</strong><span>今日刷题</span></div>
           <div><strong>{{ fish.todaySentences.value }}</strong><span>今日长难句</span></div>
@@ -47,7 +47,11 @@ function submitFocus() {
         <div v-if="nextCountdown" class="next-card">
           <strong>{{ nextCountdown.title }}</strong>
           <span>{{ nextCountdown.date }}</span>
-          <p>{{ nextCountdown.note }}</p>
+          <ul class="todo-preview-list" v-if="nextCountdown.todos?.length">
+            <li v-for="todo in nextCountdown.todos.slice(0, 3)" :key="todo.id" :class="{ done: todo.done }">
+              {{ todo.text }}
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -75,6 +79,7 @@ function submitFocus() {
         <p class="recommend-box">
           {{ moods.find((mood) => mood.id === fish.state.selectedMood)?.advice || "先选一个状态，系统会把任务门槛调到合适的位置。" }}
         </p>
+        <p class="prompt-chip">{{ fish.promptFor('practice') }}</p>
       </section>
 
       <section class="panel tasks-panel">

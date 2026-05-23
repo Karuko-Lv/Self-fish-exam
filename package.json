@@ -1,0 +1,13 @@
+{
+  "name": "self-fish",
+  "version": "0.1.0",
+  "private": true,
+  "description": "加油小小鱼考研自我管理网站",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

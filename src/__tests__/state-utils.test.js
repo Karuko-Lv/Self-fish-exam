@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shortPoolLines } from "../constants/defaults.js";
 import { studyDayISO } from "../utils/dates.js";
 import { localStorageKeyForUser, normalizeState } from "../utils/state.js";
 
@@ -66,5 +67,10 @@ describe("state utilities", () => {
         reviewed: false,
       }),
     ]);
+  });
+
+  it("keeps dashboard random lines short enough for mobile headers", () => {
+    expect(shortPoolLines.length).toBeGreaterThan(0);
+    expect(shortPoolLines.every((line) => Array.from(line).length <= 8)).toBe(true);
   });
 });

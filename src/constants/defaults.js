@@ -56,6 +56,21 @@ export const defaultPromptCards = [
   { id: "review-1", group: "review", text: "周复盘只抓一个主问题，下周才真的能变轻。" },
 ];
 
+export const shortPoolLines = [
+  "稳住节奏",
+  "先做一件",
+  "小步前进",
+  "今天也游",
+  "慢慢靠岸",
+  "把心放稳",
+  "别急会到",
+  "主线接住",
+  "一点点赢",
+  "去做就好",
+  "保持在线",
+  "慢慢变强",
+];
+
 export const moods = [
   {
     id: "clear",

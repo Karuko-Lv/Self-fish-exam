@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import ExportActions from "../components/ExportActions.vue";
-import { moods, subjects } from "../constants/defaults.js";
+import { moods, shortPoolLines, subjects } from "../constants/defaults.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
 const focusForm = reactive({ subject: "ds", startTime: "08:00", endTime: "08:25", note: "" });
 const editingFocusId = ref("");
 const focusEditForm = reactive({ subject: "ds", startTime: "08:00", endTime: "08:25", note: "" });
 const now = ref(new Date());
+const poolLine = ref(shortPoolLines[Math.floor(Math.random() * shortPoolLines.length)] || "稳住节奏");
 let clockTimer = null;
 
 const nextCountdown = computed(() =>
@@ -91,7 +92,7 @@ onBeforeUnmount(() => window.clearInterval(clockTimer));
     <div class="topbar">
       <div>
         <p class="eyebrow">Today</p>
-        <h2>今日泳池 · 还有 <span>{{ fish.daysLeft.value }}</span> 天</h2>
+        <h2 class="pool-title">{{ poolLine }}</h2>
       </div>
       <div class="topbar-actions">
         <ExportActions title="今日泳池" :payload="{ focusLogs: fish.state.focusLogs, tasks: fish.state.tasks }" :rows="focusExportRows" />

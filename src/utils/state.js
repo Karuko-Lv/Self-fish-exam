@@ -2,6 +2,7 @@ import {
   DEFAULT_EXAM_DATE,
   STORAGE_KEY_BASE,
   defaultTasks,
+  defaultPromptCards,
   seedTopics,
   subjects,
 } from "../constants/defaults.js";
@@ -13,6 +14,72 @@ export function localStorageKeyForUser(userId) {
 
 export function uid(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeCountdownTodos(event) {
+  if (Array.isArray(event.todos)) {
+    return event.todos
+      .map((todo, index) => ({
+        id: todo.id || `${event.id || "countdown"}-todo-${index}`,
+        text: String(todo.text || "").trim(),
+        done: Boolean(todo.done),
+      }))
+      .filter((todo) => todo.text);
+  }
+
+  return String(event.note || "")
+    .split("\n")
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text, index) => ({
+      id: `${event.id || "countdown"}-todo-${index}`,
+      text,
+      done: false,
+    }));
+}
+
+function normalizeCountdownEvents(events) {
+  return events.map((event, index) => {
+    const id = event.id || `countdown-${index}`;
+    return {
+      id,
+      title: event.title || "未命名节点",
+      date: event.date || DEFAULT_EXAM_DATE,
+      note: event.note || "",
+      todos: normalizeCountdownTodos({ ...event, id }),
+    };
+  });
+}
+
+function normalizePromptCards(cards) {
+  const source = Array.isArray(cards) && cards.length ? cards : defaultPromptCards;
+  return source
+    .map((card, index) => ({
+      id: card.id || `prompt-${index}`,
+      group: card.group || "dashboard",
+      text: String(card.text || "").trim(),
+    }))
+    .filter((card) => card.text);
+}
+
+function normalizeKnowledgeReviews(input) {
+  const source = Array.isArray(input.knowledgeReviews)
+    ? input.knowledgeReviews
+    : Array.isArray(input.mistakes)
+      ? input.mistakes
+      : [];
+
+  return source.map((item, index) => ({
+    id: item.id || `knowledge-review-${index}`,
+    subject: item.subject || "ds",
+    topic: item.topic || "",
+    cause: item.cause || "概念不清",
+    reviewDate: item.reviewDate || todayISO(),
+    summary: item.summary || "",
+    reviewed: Boolean(item.reviewed),
+    date: item.date || todayISO(),
+    createdAt: item.createdAt || new Date().toISOString(),
+  }));
 }
 
 export function normalizeState(input = {}) {
@@ -52,9 +119,9 @@ export function normalizeState(input = {}) {
     focusLogs: Array.isArray(input.focusLogs) ? input.focusLogs : [],
     pomodoroLogs: Array.isArray(input.pomodoroLogs) ? input.pomodoroLogs : [],
     distractionLogs: Array.isArray(input.distractionLogs) ? input.distractionLogs : [],
-    mistakes: Array.isArray(input.mistakes) ? input.mistakes : [],
+    knowledgeReviews: normalizeKnowledgeReviews(input),
     ideas: Array.isArray(input.ideas) ? input.ideas : [],
-    countdownEvents:
+    countdownEvents: normalizeCountdownEvents(
       Array.isArray(input.countdownEvents) && input.countdownEvents.length
         ? input.countdownEvents
         : [
@@ -62,15 +129,20 @@ export function normalizeState(input = {}) {
               id: "exam-default",
               title: "考研初试",
               date: DEFAULT_EXAM_DATE,
-              note: "默认目标日，可在倒数日里继续添加阶段节点。",
+              todos: [{ id: "exam-default-todo-0", text: "确认考试时间和考点安排", done: false }],
             },
             {
               id: "month-default",
               title: "本月复盘",
               date: dateAdd(7),
-              note: "检查 408、数一、英一各自最不稳的一个点。",
+              todos: [
+                { id: "month-default-todo-0", text: "检查 408 最不稳的一个点", done: false },
+                { id: "month-default-todo-1", text: "检查数一和英一的本周卡点", done: false },
+              ],
             },
           ],
+    ),
+    promptCards: normalizePromptCards(input.promptCards),
     settings: {
       adaptiveFit: Boolean(input.settings?.adaptiveFit),
       ...(input.settings || {}),

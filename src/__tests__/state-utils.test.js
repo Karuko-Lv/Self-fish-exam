@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shortPoolLines } from "../constants/defaults.js";
 import { studyDayISO } from "../utils/dates.js";
 import { localStorageKeyForUser, normalizeState } from "../utils/state.js";
 
@@ -19,5 +20,57 @@ describe("state utilities", () => {
     expect(state.practiceLogs).toEqual([]);
     expect(state.sentenceLogs).toEqual([]);
     expect(state.countdownEvents.length).toBeGreaterThan(0);
+    expect(state.promptCards.length).toBeGreaterThan(0);
+  });
+
+  it("migrates countdown notes into checkbox todos", () => {
+    const state = normalizeState({
+      countdownEvents: [
+        {
+          id: "exam",
+          title: "阶段复盘",
+          date: "2026-06-01",
+          note: "整理错题\n背作文模板",
+        },
+      ],
+    });
+
+    expect(state.countdownEvents[0].todos).toEqual([
+      { id: "exam-todo-0", text: "整理错题", done: false },
+      { id: "exam-todo-1", text: "背作文模板", done: false },
+    ]);
+  });
+
+  it("migrates old mistakes into knowledge reviews", () => {
+    const state = normalizeState({
+      mistakes: [
+        {
+          id: "old-1",
+          subject: "ds",
+          topic: "二叉树遍历",
+          cause: "概念不清",
+          reviewDate: "2026-06-01",
+          summary: "递归边界没想清楚。",
+        },
+      ],
+    });
+
+    expect(state.mistakes).toBeUndefined();
+    expect(state.knowledgeReviews).toEqual([
+      expect.objectContaining({
+        id: "old-1",
+        subject: "ds",
+        topic: "二叉树遍历",
+        cause: "概念不清",
+        reviewDate: "2026-06-01",
+        summary: "递归边界没想清楚。",
+        reviewed: false,
+      }),
+    ]);
+  });
+
+  it("keeps dashboard random lines short enough for mobile headers", () => {
+    expect(shortPoolLines.length).toBeGreaterThan(0);
+    expect(shortPoolLines.every((line) => Array.from(line).length <= 8)).toBe(true);
   });
 });

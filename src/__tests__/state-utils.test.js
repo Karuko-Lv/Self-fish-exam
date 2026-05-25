@@ -23,6 +23,39 @@ describe("state utilities", () => {
     expect(state.promptCards.length).toBeGreaterThan(0);
   });
 
+  it("normalizes sidebar avatar image settings", () => {
+    const avatarImage = "data:image/png;base64,avatar";
+
+    expect(normalizeState({}).settings.avatarImage).toBe("");
+    expect(normalizeState({ settings: { avatarImage } }).settings.avatarImage).toBe(avatarImage);
+    expect(normalizeState({ settings: { avatarImage: "https://example.com/avatar.png" } }).settings.avatarImage).toBe("");
+  });
+
+  it("defaults to Chinese language and migrates user text to bilingual fields", () => {
+    const state = normalizeState({
+      focusLogs: [{ id: "f1", note: "整理错题" }],
+      countdownEvents: [
+        {
+          id: "c1",
+          title: "本月复盘",
+          date: "2026-06-01",
+          todos: [{ text: "完成英语阅读复盘" }],
+        },
+      ],
+      ideas: [{ id: "i1", text: "整理错题模板", reason: "下次更快" }],
+    });
+
+    expect(state.settings.language).toBe("zh");
+    expect(state.focusLogs[0].note).toEqual({ zh: "整理错题", en: "Review mistakes" });
+    expect(state.countdownEvents[0].title).toEqual({ zh: "本月复盘", en: "Monthly review" });
+    expect(state.countdownEvents[0].todos[0].text).toEqual({
+      zh: "完成英语阅读复盘",
+      en: "Complete English reading review",
+    });
+    expect(state.ideas[0].text.zh).toBe("整理错题模板");
+    expect(state.ideas[0].text.en).toContain("mistakes template");
+  });
+
   it("migrates countdown notes into checkbox todos", () => {
     const state = normalizeState({
       countdownEvents: [
@@ -36,8 +69,8 @@ describe("state utilities", () => {
     });
 
     expect(state.countdownEvents[0].todos).toEqual([
-      { id: "exam-todo-0", text: "整理错题", done: false },
-      { id: "exam-todo-1", text: "背作文模板", done: false },
+      { id: "exam-todo-0", text: { zh: "整理错题", en: "Review mistakes" }, done: false },
+      { id: "exam-todo-1", text: { zh: "背作文模板", en: "背作文 template" }, done: false },
     ]);
   });
 
@@ -60,17 +93,20 @@ describe("state utilities", () => {
       expect.objectContaining({
         id: "old-1",
         subject: "ds",
-        topic: "二叉树遍历",
+        topic: { zh: "二叉树遍历", en: "二叉树遍历" },
         cause: "概念不清",
         reviewDate: "2026-06-01",
-        summary: "递归边界没想清楚。",
+        summary: { zh: "递归边界没想清楚。", en: "递归边界没想清楚." },
         reviewed: false,
       }),
     ]);
   });
 
-  it("keeps dashboard random lines short enough for mobile headers", () => {
+  it("keeps dashboard random lines around ten motivational characters", () => {
     expect(shortPoolLines.length).toBeGreaterThan(0);
-    expect(shortPoolLines.every((line) => Array.from(line).length <= 8)).toBe(true);
+    expect(shortPoolLines.every((line) => {
+      const length = Array.from(line).length;
+      return length >= 9 && length <= 11;
+    })).toBe(true);
   });
 });

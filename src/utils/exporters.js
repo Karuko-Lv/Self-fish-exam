@@ -28,10 +28,6 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-export function exportJson(title, payload) {
-  downloadBlob(JSON.stringify(payload, null, 2), `${safeFilename(title)}.json`, "application/json;charset=utf-8");
-}
-
 export function exportCsv(title, rows) {
   if (!rows.length) {
     downloadBlob("", `${safeFilename(title)}.csv`, "text/csv;charset=utf-8");

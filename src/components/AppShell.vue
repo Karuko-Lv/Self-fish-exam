@@ -25,6 +25,9 @@ const props = defineProps({
 
 const emit = defineEmits(["logout"]);
 const activeView = ref("dashboard");
+const avatarInput = ref(null);
+const avatarSrc = computed(() => props.fish.state.settings.avatarImage || "");
+const maxAvatarBytes = 2 * 1024 * 1024;
 
 const navItems = [
   ["dashboard", "今日泳池", "▣"],
@@ -56,35 +59,89 @@ const currentComponent = computed(
       settings: SettingsView,
     })[activeView.value],
 );
+
+function openAvatarPicker() {
+  avatarInput.value?.click();
+}
+
+function handleAvatarUpload(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    props.fish.notify(props.fish.t("请选择图片文件。"));
+    return;
+  }
+
+  if (file.size > maxAvatarBytes) {
+    props.fish.notify(props.fish.t("图片不要超过 2MB。"));
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = typeof reader.result === "string" ? reader.result : "";
+    if (!result.startsWith("data:image/")) {
+      props.fish.notify(props.fish.t("头像读取失败，请换一张图片。"));
+      return;
+    }
+    props.fish.setAvatarImage(result);
+  };
+  reader.onerror = () => props.fish.notify(props.fish.t("头像读取失败，请换一张图片。"));
+  reader.readAsDataURL(file);
+}
 </script>
 
 <template>
   <div class="app-shell">
-    <aside class="sidebar" aria-label="主导航">
-      <div class="brand-block">
-        <div class="kitty-face small" aria-hidden="true"><span></span></div>
-        <div>
-          <p class="eyebrow">Kitty Focus</p>
-          <h1>加油小小鱼</h1>
+    <aside class="sidebar" :aria-label="fish.t('主导航')">
+      <div class="sidebar-inner">
+        <div class="brand-block">
+          <div class="avatar-upload">
+            <button
+              class="avatar-upload-button"
+              type="button"
+              :aria-label="fish.t('上传头像')"
+              :title="fish.t('上传头像')"
+              @click="openAvatarPicker"
+            >
+              <img v-if="avatarSrc" class="avatar-photo" :src="avatarSrc" :alt="fish.t('当前头像')" />
+              <span v-else class="kitty-face small" aria-hidden="true"><span></span></span>
+              <span class="avatar-upload-badge" aria-hidden="true">+</span>
+            </button>
+            <input
+              ref="avatarInput"
+              class="avatar-file-input"
+              type="file"
+              accept="image/*"
+              @change="handleAvatarUpload"
+            />
+          </div>
+          <div>
+            <p class="eyebrow">Kitty Focus</p>
+            <h1>{{ fish.t("加油小小鱼") }}</h1>
+          </div>
         </div>
-      </div>
-      <nav class="nav-list">
-        <button
-          v-for="[id, label, icon] in navItems"
-          :key="id"
-          class="nav-item"
-          :class="{ 'is-active': activeView === id }"
-          type="button"
-          @click="activeView = id"
-        >
-          <span class="nav-icon" aria-hidden="true">{{ icon }}</span>
-          {{ label }}
-        </button>
-      </nav>
-      <div class="sidebar-note">
-        <strong>{{ user.name }}</strong>
-        <span>{{ fish.syncStatus.value }}</span>
-        <button class="ghost-button" type="button" @click="emit('logout')">退出</button>
+        <nav class="nav-list">
+          <button
+            v-for="[id, label, icon] in navItems"
+            :key="id"
+            class="nav-item"
+            :class="{ 'is-active': activeView === id }"
+            type="button"
+            @click="activeView = id"
+          >
+            <span class="nav-icon" aria-hidden="true">{{ icon }}</span>
+            {{ fish.t(label) }}
+          </button>
+        </nav>
+        <div class="sidebar-note">
+          <strong>{{ user.name }}</strong>
+          <span>{{ fish.t(fish.syncStatus.value) }}</span>
+          <button class="ghost-button" type="button" @click="emit('logout')">{{ fish.t("退出") }}</button>
+        </div>
       </div>
     </aside>
     <main class="main-content">

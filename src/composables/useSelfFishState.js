@@ -1,7 +1,29 @@
 import { computed, reactive, ref, watch } from "vue";
 import { subjects } from "../constants/defaults.js";
+import { translateMessage } from "../i18n/messages.js";
+import { ensureBilingualText, setBilingualText, setChineseSourceText, textValue } from "../i18n/userText.js";
 import { daysUntil, startOfWeek, studyDayISO, todayISO } from "../utils/dates.js";
 import { localStorageKeyForUser, normalizeState, uid } from "../utils/state.js";
+
+const bilingualFieldsByCollection = {
+  tasks: ["title", "detail"],
+  countdownEvents: ["title", "note"],
+  practiceLogs: ["source", "note"],
+  sentenceLogs: ["text", "source", "note"],
+  focusLogs: ["note"],
+  pomodoroLogs: ["mode", "note"],
+  distractionLogs: ["text"],
+  knowledgeReviews: ["topic", "summary"],
+  ideas: ["text", "reason"],
+};
+
+function withBilingualFields(payload, fields) {
+  const nextPayload = { ...payload };
+  fields.forEach((field) => {
+    if (field in nextPayload) nextPayload[field] = setChineseSourceText(undefined, nextPayload[field]);
+  });
+  return nextPayload;
+}
 
 export function useSelfFishState(user, showToast) {
   const state = reactive(normalizeState({}));
@@ -12,6 +34,8 @@ export function useSelfFishState(user, showToast) {
 
   const today = computed(() => todayISO());
   const daysLeft = computed(() => daysUntil(state.examDate));
+  const language = computed(() => state.settings.language || "zh");
+  const isEnglish = computed(() => language.value === "en");
 
   function replaceState(nextState) {
     suppressSave = true;
@@ -95,8 +119,35 @@ export function useSelfFishState(user, showToast) {
     { deep: true },
   );
 
+  function setLanguage(nextLanguage) {
+    state.settings.language = nextLanguage === "en" ? "en" : "zh";
+  }
+
+  function notify(message) {
+    if (message) showToast?.(message);
+  }
+
+  function setAvatarImage(value) {
+    const nextValue = typeof value === "string" && value.startsWith("data:image/") ? value : "";
+    state.settings.avatarImage = nextValue;
+    showToast?.(t(nextValue ? "头像已更新。" : "头像已恢复默认。"));
+  }
+
+  function t(message, params) {
+    return translateMessage(message, language.value, params);
+  }
+
+  function tx(value) {
+    return textValue(value, language.value);
+  }
+
+  function textSource(value) {
+    return textValue(value, "zh");
+  }
+
   function subjectName(id) {
-    return subjects.find((subject) => subject.id === id)?.name || id;
+    const subject = subjects.find((item) => item.id === id);
+    return subject ? t(subject.name) : id;
   }
 
   function resetDailyTasks() {
@@ -163,10 +214,10 @@ export function useSelfFishState(user, showToast) {
     const generated = Object.entries(profile).map(([level, [title, minutes, detail]]) => ({
       id: uid("task"),
       level,
-      title,
+      title: setChineseSourceText(undefined, title),
       subject: weakSubject,
       minutes,
-      detail,
+      detail: setChineseSourceText(undefined, detail),
       done: false,
     }));
     state.tasks = [...generated, ...state.tasks].slice(0, 9);
@@ -184,7 +235,7 @@ export function useSelfFishState(user, showToast) {
       id: uid("focus"),
       date: today.value,
       createdAt: new Date().toISOString(),
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.focusLogs),
       minutes,
     });
   }
@@ -196,7 +247,18 @@ export function useSelfFishState(user, showToast) {
   function updateById(collection, id, patch) {
     const item = state[collection]?.find((entry) => entry.id === id);
     if (!item) return;
-    Object.assign(item, patch);
+    const fields = bilingualFieldsByCollection[collection] || [];
+    const nextPatch = { ...patch };
+    fields.forEach((field) => {
+      if (field in nextPatch) nextPatch[field] = setChineseSourceText(item[field], nextPatch[field]);
+    });
+    Object.assign(item, nextPatch);
+  }
+
+  function updateTranslation(collection, id, field, nextText) {
+    const item = state[collection]?.find((entry) => entry.id === id);
+    if (!item) return;
+    item[field] = setBilingualText(item[field], "en", nextText);
   }
 
   function minutesBetween(startTime, endTime) {
@@ -213,9 +275,11 @@ export function useSelfFishState(user, showToast) {
     state.countdownEvents.push({
       id,
       ...payload,
+      title: setChineseSourceText(undefined, payload.title),
+      note: setChineseSourceText(undefined, payload.note || ""),
       todos: (payload.todos || []).map((todo, index) => ({
         id: todo.id || `${id}-todo-${index}`,
-        text: todo.text,
+        text: setChineseSourceText(undefined, todo.text),
         done: Boolean(todo.done),
       })),
     });
@@ -228,7 +292,22 @@ export function useSelfFishState(user, showToast) {
   }
 
   function updateCountdown(eventId, patch) {
-    updateById("countdownEvents", eventId, patch);
+    const nextPatch = { ...patch };
+    if ("title" in nextPatch) nextPatch.title = patch.title;
+    if ("note" in nextPatch) nextPatch.note = patch.note;
+    if (Array.isArray(nextPatch.todos)) {
+      nextPatch.todos = nextPatch.todos.map((todo) => ({
+        ...todo,
+        text: ensureBilingualText(todo.text),
+      }));
+    }
+    updateById("countdownEvents", eventId, nextPatch);
+  }
+
+  function updateCountdownTodoTranslation(eventId, todoId, nextText) {
+    const event = state.countdownEvents.find((item) => item.id === eventId);
+    const todo = event?.todos?.find((item) => item.id === todoId);
+    if (todo) todo.text = setBilingualText(todo.text, "en", nextText);
   }
 
   function updateTopicStatus(subjectId, topicId, status) {
@@ -241,7 +320,7 @@ export function useSelfFishState(user, showToast) {
       id: uid("practice"),
       date: today.value,
       createdAt: new Date().toISOString(),
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.practiceLogs),
     });
   }
 
@@ -250,7 +329,7 @@ export function useSelfFishState(user, showToast) {
       id: uid("sentence"),
       date: today.value,
       createdAt: new Date().toISOString(),
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.sentenceLogs),
     });
   }
 
@@ -259,7 +338,7 @@ export function useSelfFishState(user, showToast) {
       id: uid("pomodoro"),
       date: today.value,
       createdAt: new Date().toISOString(),
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.pomodoroLogs),
     });
   }
 
@@ -269,7 +348,7 @@ export function useSelfFishState(user, showToast) {
       date: today.value,
       createdAt: new Date().toISOString(),
       done: false,
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.distractionLogs),
     });
   }
 
@@ -284,7 +363,7 @@ export function useSelfFishState(user, showToast) {
       date: today.value,
       createdAt: new Date().toISOString(),
       reviewed: false,
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.knowledgeReviews),
     });
   }
 
@@ -299,20 +378,22 @@ export function useSelfFishState(user, showToast) {
       date: today.value,
       createdAt: new Date().toISOString(),
       parked: true,
-      ...payload,
+      ...withBilingualFields(payload, bilingualFieldsByCollection.ideas),
     });
   }
 
   function convertIdeaToTask(id) {
     const idea = state.ideas.find((item) => item.id === id);
     if (!idea) return;
+    const ideaText = textValue(idea.text, "zh");
+    const ideaReason = textValue(idea.reason, "zh");
     state.tasks.unshift({
       id: uid("task"),
       level: "base",
-      title: `奖励任务：${idea.text}`,
+      title: setChineseSourceText(undefined, `奖励任务：${ideaText}`),
       subject: "ds",
       minutes: 25,
-      detail: idea.reason || "限定 25 分钟，做完立刻回到主线。",
+      detail: setChineseSourceText(undefined, ideaReason || "限定 25 分钟，做完立刻回到主线。"),
       done: false,
     });
     idea.parked = false;
@@ -359,8 +440,8 @@ export function useSelfFishState(user, showToast) {
     return {
       minutes,
       topSubject: topSubject ? subjectName(topSubject) : "--",
-      topCause: topCause || "--",
-      nextFocus: topCause || "知识点复盘",
+      topCause: topCause ? t(topCause) : "--",
+      nextFocus: topCause ? t(topCause) : t("知识点复盘"),
     };
   });
 
@@ -376,13 +457,15 @@ export function useSelfFishState(user, showToast) {
   });
 
   function promptFor(group) {
-    return promptByGroup.value[group]?.text || promptByGroup.value.dashboard?.text || "慢慢来，小小鱼也能游到岸边。";
+    return tx(promptByGroup.value[group]?.text || promptByGroup.value.dashboard?.text || "慢慢来，小小鱼也能游到岸边。");
   }
 
   return {
     state,
     loaded,
     syncStatus,
+    language,
+    isEnglish,
     today,
     daysLeft,
     todayPractice,
@@ -392,6 +475,12 @@ export function useSelfFishState(user, showToast) {
     todayMinutes,
     weekStats,
     promptFor,
+    setLanguage,
+    notify,
+    setAvatarImage,
+    t,
+    tx,
+    textSource,
     initialize,
     subjectName,
     maybeResetDailyTasks,
@@ -402,10 +491,12 @@ export function useSelfFishState(user, showToast) {
     toggleTask,
     addFocusLog,
     updateById,
+    updateTranslation,
     minutesBetween,
     addCountdown,
     toggleCountdownTodo,
     updateCountdown,
+    updateCountdownTodoTranslation,
     updateTopicStatus,
     addPracticeLog,
     addSentenceLog,

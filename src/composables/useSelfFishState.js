@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, shallowRef, watch } from "vue";
 import { timerSubjects } from "../constants/defaults.js";
 import { translateMessage } from "../i18n/messages.js";
 import { ensureBilingualText, setBilingualText, setChineseSourceText, textValue } from "../i18n/userText.js";
@@ -29,6 +29,7 @@ function withBilingualFields(payload, fields) {
 
 export function useSelfFishState(user, showToast) {
   const state = reactive(normalizeState({}));
+  const activeTimer = shallowRef(null);
   const loaded = ref(false);
   const syncStatus = ref("等待登录");
   let saveTimer = null;
@@ -108,6 +109,19 @@ export function useSelfFishState(user, showToast) {
       syncStatus.value = "本地模式";
     }
   }
+
+  watch(
+    activeTimer,
+    (val) => {
+      if (!user.value) return;
+      const key = localStorageKeyForUser(user.value.id) + '.activeTimer';
+      if (val) {
+        localStorage.setItem(key, JSON.stringify(val));
+      } else {
+        localStorage.removeItem(key);
+      }
+    },
+  );
 
   watch(
     state,
@@ -335,6 +349,25 @@ export function useSelfFishState(user, showToast) {
     });
   }
 
+  function saveActiveTimer(snapshot) {
+    activeTimer.value = { ...snapshot };
+  }
+
+  function clearActiveTimer() {
+    activeTimer.value = null;
+  }
+
+  function getActiveTimer() {
+    if (!user.value) return null;
+    const key = localStorageKeyForUser(user.value.id) + '.activeTimer';
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
   function addPomodoroLog(payload) {
     state.pomodoroLogs.unshift({
       id: uid("pomodoro"),
@@ -521,6 +554,9 @@ export function useSelfFishState(user, showToast) {
     updateTopicStatus,
     addPracticeLog,
     addSentenceLog,
+    saveActiveTimer,
+    clearActiveTimer,
+    getActiveTimer,
     addPomodoroLog,
     addDistraction,
     toggleDistraction,

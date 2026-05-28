@@ -134,7 +134,7 @@ function saveEdit(id) {
               </div>
               <div class="row-actions">
                 <button type="button" @click="startEdit(item)">{{ fish.t("编辑") }}</button>
-                <button type="button" @click="fish.deleteById('expenses', item.id)">{{ fish.t("删除") }}</button>
+                <button type="button" class="is-delete" @click="fish.deleteById('expenses', item.id)">{{ fish.t("删除") }}</button>
               </div>
             </template>
           </article>

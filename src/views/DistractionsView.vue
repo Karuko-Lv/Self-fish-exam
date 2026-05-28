@@ -49,7 +49,7 @@ function saveEdit(id) {
           <label>{{ fish.t("回头处理时间") }}<input v-model="editForm.reviewTime" type="time" /></label>
           <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="editingId = ''">{{ fish.t("取消") }}</button></div>
         </form>
-        <template v-else><div><strong><BilingualTextEditor :fish="fish" :value="item.text" @save="(text) => fish.updateTranslation('distractionLogs', item.id, 'text', text)" /></strong><small>{{ fish.t(distractionTypes[item.type]) }} · {{ item.reviewTime || fish.t('稍后') }}</small></div><div class="row-actions"><button @click="fish.toggleDistraction(item.id)">{{ item.done ? fish.t('重开') : fish.t('处理') }}</button><button @click="startEdit(item)">{{ fish.t("编辑") }}</button><button @click="fish.deleteById('distractionLogs', item.id)">{{ fish.t("删除") }}</button></div></template>
+        <template v-else><div><strong><BilingualTextEditor :fish="fish" :value="item.text" @save="(text) => fish.updateTranslation('distractionLogs', item.id, 'text', text)" /></strong><small>{{ fish.t(distractionTypes[item.type]) }} · {{ item.reviewTime || fish.t('稍后') }}</small></div><div class="row-actions"><button @click="fish.toggleDistraction(item.id)">{{ item.done ? fish.t('重开') : fish.t('处理') }}</button><button @click="startEdit(item)">{{ fish.t("编辑") }}</button><button class="is-delete" @click="fish.deleteById('distractionLogs', item.id)">{{ fish.t("删除") }}</button></div></template>
       </article></div></section>
     </div>
   </section>

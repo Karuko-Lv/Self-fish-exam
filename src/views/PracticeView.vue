@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { subjects } from "../constants/defaults.js";
@@ -43,10 +43,34 @@ function startEdit(log) {
   });
 }
 
-function saveEdit(id) {
-  props.fish.updateById("practiceLogs", id, { ...editForm });
-  editingId.value = "";
+const stopwatchSeconds = ref(0);
+const stopwatchRunning = ref(false);
+let stopwatchInterval = null;
+
+const stopwatchDisplay = computed(() => {
+  const m = Math.floor(stopwatchSeconds.value / 60);
+  const s = stopwatchSeconds.value % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+});
+
+function toggleStopwatch() {
+  if (stopwatchRunning.value) {
+    stopwatchRunning.value = false;
+    clearInterval(stopwatchInterval);
+    form.minutes = Math.max(5, Math.ceil(stopwatchSeconds.value / 60));
+  } else {
+    stopwatchRunning.value = true;
+    stopwatchInterval = setInterval(() => { stopwatchSeconds.value++; }, 1000);
+  }
 }
+
+function resetStopwatch() {
+  stopwatchRunning.value = false;
+  clearInterval(stopwatchInterval);
+  stopwatchSeconds.value = 0;
+}
+
+onBeforeUnmount(() => clearInterval(stopwatchInterval));
 </script>
 
 <template>
@@ -62,6 +86,11 @@ function saveEdit(id) {
             <label>{{ fish.t("总题数") }}<input v-model.number="form.total" type="number" min="1" /></label>
             <label>{{ fish.t("正确数") }}<input v-model.number="form.correct" type="number" min="0" /></label>
             <label>{{ fish.t("分钟") }}<input v-model.number="form.minutes" type="number" min="5" step="5" /></label>
+          </div>
+          <div class="stopwatch-row">
+            <span class="stopwatch-display">{{ stopwatchDisplay }}</span>
+            <button class="primary-button stopwatch-btn" type="button" @click="toggleStopwatch">{{ stopwatchRunning ? fish.t('暂停') : fish.t('开始') }}</button>
+            <button class="secondary-button stopwatch-btn" type="button" @click="resetStopwatch">{{ fish.t('重置') }}</button>
           </div>
           <label>{{ fish.t("一句话记录") }}<textarea v-model="form.note" rows="4" maxlength="180"></textarea></label>
           <button class="primary-button" type="submit">{{ fish.t("记录刷题") }}</button>
@@ -86,7 +115,7 @@ function saveEdit(id) {
                 <small>{{ fish.subjectName(log.subject) }} · {{ log.correct }}/{{ log.total }} · {{ log.minutes }} {{ fish.t("分钟") }}</small>
                 <p><BilingualTextEditor :fish="fish" :value="log.note" textarea @save="(text) => fish.updateTranslation('practiceLogs', log.id, 'note', text)" /></p>
               </div>
-              <div class="row-actions"><button type="button" @click="startEdit(log)">{{ fish.t("编辑") }}</button><button type="button" @click="fish.deleteById('practiceLogs', log.id)">{{ fish.t("删除") }}</button></div>
+              <div class="row-actions"><button type="button" @click="startEdit(log)">{{ fish.t("编辑") }}</button><button type="button" class="is-delete" @click="fish.deleteById('practiceLogs', log.id)">{{ fish.t("删除") }}</button></div>
             </template>
           </article>
         </div>

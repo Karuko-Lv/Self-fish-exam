@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { timerSubjects } from "../constants/defaults.js";
@@ -10,8 +10,59 @@ defineOptions({ name: "TimerView" });
 const props = defineProps({ fish: { type: Object, required: true } });
 const timer = reactive({ mode: "专注", direction: "down", seconds: 25 * 60, remaining: 25 * 60, running: false, note: "", subject: "ds", startTime: "" });
 const editingId = ref("");
-const editForm = reactive({ subject: "ds", minutes: 25, mode: "专注", note: "" });
+const expandedLogId = ref("");
+const selectedTimelineTask = ref(null);
+const editForm = reactive({ subject: "ds", mode: "专注", note: "", startTime: "", endTime: "" });
+
+function toggleExpand(id) {
+  expandedLogId.value = expandedLogId.value === id ? "" : id;
+}
+const addingNew = ref(false);
+const addForm = reactive({ subject: "ds", mode: "专注", note: "", startTime: "", endTime: "", date: todayISO() });
 let interval = null;
+
+const now = ref(new Date());
+let clockInterval = null;
+onMounted(() => {
+  clockInterval = setInterval(() => { now.value = new Date(); }, 1000);
+
+  const saved = props.fish.getActiveTimer();
+  if (!saved || !saved.startTimestamp) return;
+
+  timer.mode = saved.mode;
+  timer.direction = saved.direction;
+  timer.seconds = saved.seconds;
+  timer.subject = saved.subject;
+  timer.note = saved.note || '';
+  timer.startTime = saved.startTime || '';
+  timer._startTimestamp = saved.startTimestamp || null;
+
+  if (saved.running) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(saved.startTimestamp).getTime()) / 1000));
+    timer.remaining = saved.seconds - elapsed;
+    if (saved.direction === 'down' && timer.remaining <= 0) {
+      timer.remaining = 0;
+      timer.running = false;
+      showTimeoutDialog.value = true;
+      props.fish.clearActiveTimer();
+      return;
+    }
+    timer.running = true;
+    interval = window.setInterval(() => {
+      if (timer.direction === 'down') {
+        timer.remaining = Math.max(0, timer.remaining - 1);
+        if (timer.remaining === 0) complete();
+      } else {
+        timer.remaining -= 1;
+      }
+    }, 1000);
+  } else {
+    timer.remaining = saved.remaining;
+    timer.running = false;
+  }
+
+  saveActiveTimerSnapshot();
+});
 
 const display = computed(() => {
   const value = timer.direction === "down" ? timer.remaining : timer.seconds - timer.remaining;
@@ -38,18 +89,39 @@ const exportRows = computed(() =>
   })),
 );
 
+const showTimeoutDialog = ref(false);
+
+function saveActiveTimerSnapshot() {
+  if (!timer.running && timer.remaining === timer.seconds) return;
+  props.fish.saveActiveTimer({
+    mode: timer.mode,
+    direction: timer.direction,
+    seconds: timer.seconds,
+    remaining: timer.remaining,
+    running: timer.running,
+    note: timer.note,
+    subject: timer.subject,
+    startTime: timer.startTime,
+    startTimestamp: timer._startTimestamp || null,
+  });
+}
+
 function setPreset(minutes, mode) {
   timer.mode = mode;
   timer.seconds = minutes * 60;
   timer.remaining = timer.seconds;
   timer.running = false;
+  timer._startTimestamp = null;
   window.clearInterval(interval);
+  props.fish.clearActiveTimer();
 }
 
 function start() {
   if (timer.running) return;
   timer.running = true;
   timer.startTime = new Date().toTimeString().slice(0, 8);
+  const alreadyElapsed = timer.seconds - timer.remaining;
+  timer._startTimestamp = new Date(Date.now() - alreadyElapsed * 1000).toISOString();
   interval = window.setInterval(() => {
     if (timer.direction === "down") {
       timer.remaining = Math.max(0, timer.remaining - 1);
@@ -58,16 +130,19 @@ function start() {
       timer.remaining -= 1;
     }
   }, 1000);
+  saveActiveTimerSnapshot();
 }
 
 function pause() {
   timer.running = false;
   window.clearInterval(interval);
+  saveActiveTimerSnapshot();
 }
 
 function reset() {
   pause();
   timer.remaining = timer.seconds;
+  saveActiveTimerSnapshot();
 }
 
 function complete() {
@@ -75,28 +150,85 @@ function complete() {
   const endTime = new Date().toTimeString().slice(0, 8);
   props.fish.addPomodoroLog({ subject: timer.subject, minutes, mode: timer.mode, note: timer.note, startTime: timer.startTime, endTime });
   reset();
+  props.fish.clearActiveTimer();
 }
 
 function startEdit(log) {
   editingId.value = log.id;
   Object.assign(editForm, {
     subject: log.subject,
-    minutes: log.minutes,
     mode: props.fish.textSource(log.mode),
     note: props.fish.textSource(log.note),
+    startTime: (log.startTime || "").slice(0, 5),
+    endTime: (log.endTime || "").slice(0, 5),
   });
 }
 
 function saveEdit(id) {
-  props.fish.updateById("pomodoroLogs", id, { ...editForm, minutes: Number(editForm.minutes) });
+  let calcMinutes = 0;
+  if (editForm.startTime && editForm.endTime) {
+    const [sh, sm] = editForm.startTime.split(':').map(Number);
+    const [eh, em] = editForm.endTime.split(':').map(Number);
+    calcMinutes = Math.max(1, (eh * 60 + em) - (sh * 60 + sm));
+  }
+  props.fish.updateById("pomodoroLogs", id, { ...editForm, minutes: calcMinutes, startTime: editForm.startTime || "", endTime: editForm.endTime || "" });
   editingId.value = "";
+}
+
+function startAdd() {
+  Object.assign(addForm, {
+    subject: "ds",
+    mode: "专注",
+    note: "",
+    startTime: "",
+    endTime: "",
+    date: todayISO(),
+  });
+  addingNew.value = true;
+}
+
+function submitAdd() {
+  let calcMinutes = 0;
+  if (addForm.startTime && addForm.endTime) {
+    const [sh, sm] = addForm.startTime.split(':').map(Number);
+    const [eh, em] = addForm.endTime.split(':').map(Number);
+    calcMinutes = Math.max(1, (eh * 60 + em) - (sh * 60 + sm));
+  }
+  props.fish.addPomodoroLog({
+    subject: addForm.subject,
+    minutes: calcMinutes,
+    mode: addForm.mode,
+    note: addForm.note,
+    startTime: addForm.startTime || "",
+    endTime: addForm.endTime || "",
+    date: addForm.date,
+  });
+  addingNew.value = false;
+}
+
+function confirmTimeoutComplete() {
+  const minutes = Math.max(1, Math.round(timer.seconds / 60));
+  const endTime = new Date().toTimeString().slice(0, 8);
+  props.fish.addPomodoroLog({
+    subject: timer.subject, minutes, mode: timer.mode,
+    note: timer.note, startTime: timer.startTime, endTime,
+  });
+  showTimeoutDialog.value = false;
+  timer.remaining = timer.seconds;
+  timer._startTimestamp = null;
+}
+
+function discardTimeout() {
+  showTimeoutDialog.value = false;
+  timer.remaining = timer.seconds;
+  timer._startTimestamp = null;
 }
 
 const analysisRange = ref("week");
 const analysisStart = ref("");
 const analysisEnd = ref("");
 
-const pinkPalette = ["#ff4f8f", "#c63470", "#ff9dbc", "#8f1a4d", "#e07098", "#f5a3c0", "#b82a5e"];
+const pinkPalette = ["#E56A75", "#C84C5F", "#FFBBC0", "#F4A6A8", "#FECBD1", "#FFDDCA", "#AAC1B1", "#C44339", "#661F26"];
 
 const subjectPinkMap = computed(() => {
   const map = {};
@@ -115,15 +247,62 @@ const todayDoneTotal = computed(() => todayDoneList.value.reduce((s, l) => s + N
 
 const todayTimeline = computed(() => {
   const logs = todayDoneList.value;
-  const slots = [];
-  const hours = logs.filter(l => l.startTime).map(l => parseInt(l.startTime.split(':')[0]));
-  const startHour = hours.length ? Math.min(...hours) - 1 : 6;
-  const endHour = hours.length ? Math.max(...hours) + 1 : 22;
-  for (let h = Math.max(6, startHour); h <= Math.min(23, endHour); h++) {
-    const hourLogs = logs.filter(l => l.startTime && parseInt(l.startTime.split(':')[0]) === h);
-    slots.push({ hour: h, logs: hourLogs });
-  }
-  return slots;
+  if (!logs.length) return { hours: [], tasks: [], totalHeight: 0 };
+
+  const PX_PER_HOUR = 60;
+
+  const tasks = logs.map(l => {
+    const sh = l.startTime ? parseInt(l.startTime.split(':')[0]) : 0;
+    const sm = l.startTime ? parseInt(l.startTime.split(':')[1]) || 0 : 0;
+    const startMin = sh * 60 + sm;
+
+    let endMin;
+    if (l.endTime) {
+      const eh = parseInt(l.endTime.split(':')[0]);
+      const em = parseInt(l.endTime.split(':')[1]) || 0;
+      endMin = eh * 60 + em;
+    } else {
+      endMin = startMin + (l.minutes || 0);
+    }
+
+    return { ...l, startMin, endMin };
+  });
+
+  const minStart = Math.min(...tasks.filter(t => t.startTime).map(t => t.startMin));
+  const maxEnd = Math.max(...tasks.map(t => t.endMin));
+  const baseMin = Math.floor((minStart - 30) / 60) * 60;
+  const ceilMin = Math.ceil((maxEnd + 30) / 60) * 60;
+
+  const hours = [];
+  for (let m = baseMin; m <= ceilMin; m += 60) hours.push(m / 60);
+
+  const withTime = tasks.filter(t => t.startTime).sort((a, b) => a.startMin - b.startMin);
+  const laneEnds = [];
+  const laneAssign = [];
+
+  withTime.forEach(t => {
+    let lane = laneEnds.findIndex(end => end <= t.startMin);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+    laneEnds[lane] = Math.max(laneEnds[lane], t.endMin);
+    laneAssign.push({ ...t, lane, laneCount: 0 });
+  });
+
+  const totalLanes = laneEnds.length;
+  laneAssign.forEach(a => { a.laneCount = totalLanes; });
+
+  const positioned = laneAssign.map(a => ({
+    ...a,
+    top: a.startMin - baseMin,
+    height: Math.max(18, a.endMin - a.startMin),
+    leftPct: totalLanes > 1 ? 4 + (a.lane / totalLanes) * 92 : 4,
+    widthPct: totalLanes > 1 ? (1 / totalLanes) * 92 - 4 : 92,
+  }));
+
+  return {
+    hours,
+    tasks: positioned,
+    totalHeight: ceilMin - baseMin,
+  };
 });
 
 function daysAgo(n) {
@@ -159,7 +338,7 @@ const analysisStats = computed(() => {
   return { totalMin, sessions, dayCount: days.size, bySubject, topSubject, dailyList };
 });
 
-onBeforeUnmount(() => window.clearInterval(interval));
+onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clockInterval); });
 </script>
 
 <template>
@@ -167,7 +346,7 @@ onBeforeUnmount(() => window.clearInterval(interval));
     <div class="topbar"><div><p class="eyebrow">Pomodoro</p><h2>{{ fish.t("番茄钟") }}</h2></div><div class="topbar-actions"><span class="metric-pill">{{ fish.t("今日") }} {{ fish.todayPomodoros.value }} {{ fish.t("组计时") }}</span><ExportActions :title="fish.t('番茄钟记录')" :payload="fish.state.pomodoroLogs" :rows="exportRows" /></div></div>
     <div class="timer-layout">
       <section class="panel timer-panel">
-        <div class="timer-orb kitty-timer" :class="{ 'is-running': timer.running }" :style="{ '--timer-progress': `${timerProgress * 360}deg` }" aria-label="Pomodoro timer">
+                <div class="timer-orb kitty-timer" :class="{ 'is-running': timer.running }" :style="{ '--timer-progress': `${timerProgress * 360}deg` }" aria-label="Pomodoro timer">
           <div class="kitty-timer-head" aria-hidden="true">
             <span class="kitty-timer-ear kitty-timer-ear-left"></span>
             <span class="kitty-timer-ear kitty-timer-ear-right"></span>
@@ -213,6 +392,15 @@ onBeforeUnmount(() => window.clearInterval(interval));
           <button class="secondary-button" type="button" @click="reset">{{ fish.t("重置") }}</button>
           <button class="small-button" type="button" @click="complete">{{ fish.t("结束并同步") }}</button>
         </div>
+        <div v-if="showTimeoutDialog" class="timeout-overlay">
+          <div class="timeout-dialog">
+            <p>{{ fish.t("计时器已在您离开期间完成。") }}</p>
+            <div class="timeout-dialog-actions">
+              <button class="primary-button" type="button" @click="confirmTimeoutComplete">{{ fish.t("确认完成") }}</button>
+              <button class="secondary-button" type="button" @click="discardTimeout">{{ fish.t("放弃本次") }}</button>
+            </div>
+          </div>
+        </div>
       </section>
       <div class="timer-right-col">
         <section class="panel focus-catch-panel">
@@ -226,39 +414,61 @@ onBeforeUnmount(() => window.clearInterval(interval));
               <h3>{{ fish.t("今日完成") }}<template v-if="todayDoneTotal"> · {{ todayDoneTotal }}{{ fish.t("分钟") }}</template></h3>
             </div>
           </div>
-          <div v-if="todayTimeline.length" class="donelist">
-            <div v-for="slot in todayTimeline" :key="slot.hour" class="donelist-hour">
-              <span class="donelist-time">{{ String(slot.hour).padStart(2, '0') }}:00</span>
-              <div class="donelist-hour-line"></div>
-              <div class="donelist-hour-items">
-                <div v-for="log in slot.logs" :key="log.id" class="donelist-item">
-                  <span class="donelist-dot" :style="{ background: subjectPinkMap[log.subject] || pinkPalette[0] }"></span>
-                  <div class="donelist-body">
-                    <span class="donelist-subject">{{ fish.subjectName(log.subject) }}</span>
-                    <span v-if="props.fish.tx(log.note)" class="donelist-note">{{ props.fish.tx(log.note) }}</span>
-                  </div>
-                  <div class="donelist-meta">
-                    <span v-if="log.startTime" class="donelist-time-label">{{ log.startTime }}</span>
-                    <span class="donelist-minutes">{{ log.minutes }}m</span>
-                  </div>
-                </div>
-                <span v-if="!slot.logs.length" class="donelist-empty-slot"></span>
+          <div v-if="todayTimeline.tasks.length" class="donelist-ios">
+            <div class="donelist-ios-labels">
+              <span v-for="h in todayTimeline.hours" :key="h" class="donelist-ios-label">{{ String(h).padStart(2, '0') }}:00</span>
+            </div>
+            <div class="donelist-ios-track" :style="{ height: todayTimeline.totalHeight + 'px' }">
+              <div v-for="h in todayTimeline.hours" :key="h" class="donelist-ios-line" :style="{ top: (h * 60 - todayTimeline.hours[0] * 60) + 'px' }"></div>
+              <div v-for="t in todayTimeline.tasks" :key="t.id" class="donelist-ios-task"
+                :class="{ 'is-selected': selectedTimelineTask?.id === t.id }"
+                :style="{
+                  top: t.top + 'px',
+                  height: t.height + 'px',
+                  left: t.leftPct + '%',
+                  width: 'calc(' + t.widthPct + '% - 6px)',
+                  background: subjectPinkMap[t.subject] || pinkPalette[0],
+                }"
+                @click="selectedTimelineTask = selectedTimelineTask?.id === t.id ? null : t">
+                <span class="donelist-ios-subject">{{ fish.subjectName(t.subject) }}</span>
+                <span v-if="props.fish.tx(t.note)" class="donelist-ios-note">{{ props.fish.tx(t.note) }}</span>
+                <span class="donelist-ios-time">{{ t.startTime }}{{ t.endTime ? ' - ' + t.endTime : '' }} · {{ t.minutes }}m</span>
               </div>
             </div>
           </div>
-          <p v-else class="empty-note">{{ fish.t("今天还没有完成番茄，开始一颗吧。") }}</p>
+          <div v-if="selectedTimelineTask" class="timeline-detail">
+            <div class="timeline-detail-header">
+              <strong>{{ fish.subjectName(selectedTimelineTask.subject) }}</strong>
+              <span>{{ selectedTimelineTask.startTime }}{{ selectedTimelineTask.endTime ? ' - ' + selectedTimelineTask.endTime : '' }} · {{ selectedTimelineTask.minutes }}m</span>
+              <button class="timeline-detail-close" @click="selectedTimelineTask = null">&times;</button>
+            </div>
+            <p v-if="props.fish.tx(selectedTimelineTask.note)">{{ props.fish.tx(selectedTimelineTask.note) }}</p>
+            <p v-else class="empty-note">{{ fish.t('暂无备注内容。') }}</p>
+          </div>
+          <p v-else-if="!todayTimeline.tasks.length" class="empty-note">{{ fish.t("今天还没有完成番茄，开始一颗吧。") }}</p>
         </section>
         <section class="panel sessions-panel">
-          <p class="panel-kicker">Sessions</p><h3>{{ fish.t("计时学习记录") }}</h3>
-          <div class="item-list"><article v-for="log in fish.state.pomodoroLogs" :key="log.id" class="list-item">
+          <div class="panel-header"><div><p class="panel-kicker">Sessions</p><h3>{{ fish.t("计时学习记录") }}</h3></div><button class="small-button" type="button" @click="startAdd()">+ {{ fish.t("添加记录") }}</button></div>
+          <div class="item-list">
+            <form v-if="addingNew" class="inline-edit-form" @submit.prevent="submitAdd()">
+              <label>{{ fish.t("日期") }}<input v-model="addForm.date" type="date" /></label>
+              <label>{{ fish.t("科目") }}<select v-model="addForm.subject"><option v-for="s in timerSubjects" :key="s.id" :value="s.id">{{ fish.t(s.name) }}</option></select></label>
+              <label>{{ fish.t("模式") }}<input v-model="addForm.mode" maxlength="20" /></label>
+              <label>{{ fish.t("起始时间") }}<input v-model="addForm.startTime" type="time" /></label>
+              <label>{{ fish.t("终止时间") }}<input v-model="addForm.endTime" type="time" /></label>
+              <label class="wide-field">{{ fish.t("内容") }}<input v-model="addForm.note" maxlength="60" /></label>
+              <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="addingNew = false">{{ fish.t("取消") }}</button></div>
+            </form>
+            <article v-for="log in fish.state.pomodoroLogs" :key="log.id" class="list-item">
             <form v-if="editingId === log.id" class="inline-edit-form" @submit.prevent="saveEdit(log.id)">
               <label>{{ fish.t("科目") }}<select v-model="editForm.subject"><option v-for="s in timerSubjects" :key="s.id" :value="s.id">{{ fish.t(s.name) }}</option></select></label>
-              <label>{{ fish.t("分钟") }}<input v-model.number="editForm.minutes" type="number" min="1" /></label>
               <label>{{ fish.t("模式") }}<input v-model="editForm.mode" maxlength="20" /></label>
+              <label>{{ fish.t("起始时间") }}<input v-model="editForm.startTime" type="time" /></label>
+              <label>{{ fish.t("终止时间") }}<input v-model="editForm.endTime" type="time" /></label>
               <label class="wide-field">{{ fish.t("内容") }}<input v-model="editForm.note" maxlength="60" /></label>
               <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="editingId = ''">{{ fish.t("取消") }}</button></div>
             </form>
-            <template v-else><div><strong>{{ fish.subjectName(log.subject) }}</strong><small><template v-if="log.startTime">{{ log.startTime }} - {{ log.endTime }} · </template>{{ log.minutes }} {{ fish.t("分钟") }}</small><p><BilingualTextEditor :fish="fish" :value="log.note" @save="(text) => fish.updateTranslation('pomodoroLogs', log.id, 'note', text)" /></p></div><div class="row-actions"><button @click="startEdit(log)">{{ fish.t("编辑") }}</button><button @click="fish.deleteById('pomodoroLogs', log.id)">{{ fish.t("删除") }}</button></div></template>
+            <template v-else><div class="timer-log-body"><strong>{{ fish.subjectName(log.subject) }}</strong><small><template v-if="log.startTime">{{ log.startTime }} - {{ log.endTime }} · </template>{{ log.minutes }} {{ fish.t("分钟") }}</small><p :class="{ 'log-note-clamped': expandedLogId !== log.id }"><BilingualTextEditor :fish="fish" :value="log.note" @save="(text) => fish.updateTranslation('pomodoroLogs', log.id, 'note', text)" /></p></div><div class="row-actions"><button v-if="fish.tx(log.note) && fish.tx(log.note).length > 40" class="row-expand-btn" @click="toggleExpand(log.id)">{{ expandedLogId === log.id ? fish.t('收起') : fish.t('展开') }}</button><button @click="startEdit(log)">{{ fish.t("编辑") }}</button><button class="is-delete" @click="fish.deleteById('pomodoroLogs', log.id)">{{ fish.t("删除") }}</button></div></template>
           </article></div>
         </section>
       </div>

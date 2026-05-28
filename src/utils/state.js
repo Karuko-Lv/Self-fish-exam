@@ -122,6 +122,7 @@ function normalizeSentenceLogs(logs) {
     source: ensureBilingualText(log.source || ""),
     note: ensureBilingualText(log.note || log.meaning || ""),
     screenshot: log.screenshot || "",
+    words: Array.isArray(log.words) ? log.words.map((w) => ({ word: w.word || "", note: w.note || "" })) : [],
     date: log.date || todayISO(),
     createdAt: log.createdAt || new Date().toISOString(),
   }));

@@ -5,7 +5,7 @@ const path = require("path");
 
 const ROOT_DIR = __dirname;
 const PORT = Number(process.env.PORT || 5173);
-const DATA_DIR = process.env.SELF_FISH_DATA_DIR || path.join(ROOT_DIR, "data");
+const DATA_DIR = process.env.SELF_FISH_DATA_DIR || (process.env.NODE_ENV === "production" ? "/data" : path.join(ROOT_DIR, "data"));
 const LEGACY_DATA_FILE = process.env.SELF_FISH_DATA_FILE || path.join(DATA_DIR, "state.json");
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;

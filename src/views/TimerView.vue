@@ -25,6 +25,7 @@ const now = ref(new Date());
 let clockInterval = null;
 onMounted(() => {
   clockInterval = setInterval(() => { now.value = new Date(); }, 1000);
+  document.addEventListener('visibilitychange', onVisibilityChange);
 
   const saved = props.fish.getActiveTimer();
   if (!saved || !saved.startTimestamp) return;
@@ -49,13 +50,15 @@ onMounted(() => {
     }
     timer.running = true;
     interval = window.setInterval(() => {
+      if (!timer._startTimestamp) return;
+      const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
       if (timer.direction === 'down') {
-        timer.remaining = Math.max(0, timer.remaining - 1);
-        if (timer.remaining === 0) complete();
+        timer.remaining = Math.max(0, timer.seconds - elapsed);
+        if (timer.remaining <= 0) complete();
       } else {
-        timer.remaining -= 1;
+        timer.remaining = timer.seconds - elapsed;
       }
-    }, 1000);
+    }, 250);
   } else {
     timer.remaining = saved.remaining;
     timer.running = false;
@@ -65,7 +68,14 @@ onMounted(() => {
 });
 
 const display = computed(() => {
-  const value = timer.direction === "down" ? timer.remaining : timer.seconds - timer.remaining;
+  const _trigger = now.value;
+  let value;
+  if (timer.running && timer._startTimestamp) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
+    value = timer.direction === "down" ? Math.max(0, timer.seconds - elapsed) : elapsed;
+  } else {
+    value = timer.direction === "down" ? timer.remaining : Math.max(0, timer.seconds - timer.remaining);
+  }
   const minutes = Math.floor(value / 60);
   const seconds = value % 60;
   return {
@@ -90,6 +100,12 @@ const exportRows = computed(() =>
 );
 
 const showTimeoutDialog = ref(false);
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    now.value = new Date();
+  }
+}
 
 function saveActiveTimerSnapshot() {
   if (!timer.running && timer.remaining === timer.seconds) return;
@@ -123,13 +139,15 @@ function start() {
   const alreadyElapsed = timer.seconds - timer.remaining;
   timer._startTimestamp = new Date(Date.now() - alreadyElapsed * 1000).toISOString();
   interval = window.setInterval(() => {
+    if (!timer._startTimestamp) return;
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
     if (timer.direction === "down") {
-      timer.remaining = Math.max(0, timer.remaining - 1);
-      if (timer.remaining === 0) complete();
+      timer.remaining = Math.max(0, timer.seconds - elapsed);
+      if (timer.remaining <= 0) complete();
     } else {
-      timer.remaining -= 1;
+      timer.remaining = timer.seconds - elapsed;
     }
-  }, 1000);
+  }, 250);
   saveActiveTimerSnapshot();
 }
 
@@ -338,7 +356,7 @@ const analysisStats = computed(() => {
   return { totalMin, sessions, dayCount: days.size, bySubject, topSubject, dailyList };
 });
 
-onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clockInterval); });
+onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clockInterval); document.removeEventListener('visibilitychange', onVisibilityChange); });
 </script>
 
 <template>

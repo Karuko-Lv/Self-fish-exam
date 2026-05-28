@@ -80,6 +80,7 @@ function normalizeKnowledgeReviews(input) {
     subject: item.subject || "ds",
     topic: ensureBilingualText(item.topic || ""),
     cause: item.cause || "概念不清",
+    frequency: item.frequency || "",
     reviewDate: item.reviewDate || todayISO(),
     summary: ensureBilingualText(item.summary || ""),
     reviewed: Boolean(item.reviewed),
@@ -146,6 +147,8 @@ function normalizePomodoroLogs(logs) {
     createdAt: log.createdAt || new Date().toISOString(),
     subject: log.subject || "ds",
     minutes: Number(log.minutes || 0),
+    startTime: log.startTime || "",
+    endTime: log.endTime || "",
     mode: ensureBilingualText(log.mode || "专注"),
     note: ensureBilingualText(log.note || ""),
   }));
@@ -161,6 +164,42 @@ function normalizeDistractionLogs(logs) {
     reviewTime: log.reviewTime || "",
     done: Boolean(log.done),
     source: log.source || "",
+  }));
+}
+
+function normalizeExamAnalyses(input) {
+  const source = Array.isArray(input) ? input : [];
+  return source.map((item, index) => {
+    const yearRecords = Array.isArray(item.yearRecords) && item.yearRecords.length
+      ? item.yearRecords.map((yr) => ({
+          year: yr.year || String(new Date().getFullYear()),
+          enrollment: Number(yr.enrollment || 0),
+          scoreLine: Number(yr.scoreLine || 0),
+        }))
+      : [{ year: item.year || String(new Date().getFullYear()), enrollment: Number(item.enrollment || 0), scoreLine: Number(item.scoreLine || 0) }];
+    return {
+      id: item.id || `ea-${index}`,
+      university: ensureBilingualText(item.university || ""),
+      major: ensureBilingualText(item.major || ""),
+      subjects: item.subjects || "",
+      note: ensureBilingualText(item.note || ""),
+      yearRecords,
+      date: item.date || todayISO(),
+      createdAt: item.createdAt || new Date().toISOString(),
+    };
+  });
+}
+
+function normalizeExpenses(input) {
+  const source = Array.isArray(input) ? input : [];
+  return source.map((item, index) => ({
+    id: item.id || `exp-${index}`,
+    amount: Number(item.amount || 0),
+    category: item.category || "other",
+    type: item.type === "income" ? "income" : "expense",
+    note: ensureBilingualText(item.note || ""),
+    date: item.date || todayISO(),
+    createdAt: item.createdAt || new Date().toISOString(),
   }));
 }
 
@@ -210,6 +249,8 @@ export function normalizeState(input = {}) {
     pomodoroLogs: Array.isArray(input.pomodoroLogs) ? normalizePomodoroLogs(input.pomodoroLogs) : [],
     distractionLogs: Array.isArray(input.distractionLogs) ? normalizeDistractionLogs(input.distractionLogs) : [],
     knowledgeReviews: normalizeKnowledgeReviews(input),
+    examAnalyses: normalizeExamAnalyses(input.examAnalyses),
+    expenses: normalizeExpenses(input.expenses),
     ideas: Array.isArray(input.ideas) ? normalizeIdeas(input.ideas) : [],
     countdownEvents: normalizeCountdownEvents(
       Array.isArray(input.countdownEvents) && input.countdownEvents.length

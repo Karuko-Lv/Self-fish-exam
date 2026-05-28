@@ -10,6 +10,8 @@ import SentencesView from "../views/SentencesView.vue";
 import SettingsView from "../views/SettingsView.vue";
 import SubjectMapView from "../views/SubjectMapView.vue";
 import TimerView from "../views/TimerView.vue";
+import ExamAnalysisView from "../views/ExamAnalysisView.vue";
+import ExpenseView from "../views/ExpenseView.vue";
 import WeeklyReviewView from "../views/WeeklyReviewView.vue";
 
 const props = defineProps({
@@ -39,6 +41,8 @@ const navItems = [
   ["distractions", "分心记录", "☆"],
   ["knowledgeReviews", "知识点复盘", "!"],
   ["ideas", "灵感停车场", "+"],
+  ["examAnalysis", "考情分析", "§"],
+  ["expense", "记账", "¥"],
   ["review", "周复盘", "∑"],
   ["settings", "设置", "⚙"],
 ];
@@ -55,6 +59,8 @@ const currentComponent = computed(
       distractions: DistractionsView,
       knowledgeReviews: KnowledgeReviewView,
       ideas: IdeasView,
+      examAnalysis: ExamAnalysisView,
+      expense: ExpenseView,
       review: WeeklyReviewView,
       settings: SettingsView,
     })[activeView.value],

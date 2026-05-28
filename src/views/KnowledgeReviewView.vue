@@ -113,7 +113,7 @@ function saveEdit(id) {
               <div class="row-actions">
                 <button @click="fish.toggleKnowledgeReviewReviewed(item.id)">{{ item.reviewed ? fish.t('取消') : fish.t('已复盘') }}</button>
                 <button @click="startEdit(item)">{{ fish.t("编辑") }}</button>
-                <button @click="fish.deleteById('knowledgeReviews', item.id)">{{ fish.t("删除") }}</button>
+                <button class="is-delete" @click="fish.deleteById('knowledgeReviews', item.id)">{{ fish.t("删除") }}</button>
               </div>
             </template>
           </article>

@@ -122,7 +122,7 @@ function saveEdit(eventId) {
                   <span class="countdown-days-unit">{{ fish.t("天") }}</span>
                 </div>
               </div>
-              <div class="row-actions countdown-actions"><button type="button" @click="startEdit(event)">{{ fish.t("编辑") }}</button><button type="button" @click="fish.deleteById('countdownEvents', event.id)">{{ fish.t("删除") }}</button></div>
+              <div class="row-actions countdown-actions"><button type="button" @click="startEdit(event)">{{ fish.t("编辑") }}</button><button type="button" class="is-delete" @click="fish.deleteById('countdownEvents', event.id)">{{ fish.t("删除") }}</button></div>
             </template>
           </article>
         </div>

@@ -7,7 +7,7 @@ const props = defineProps({ fish: { type: Object, required: true } });
 const defaultYear = String(new Date().getFullYear());
 const form = reactive({
   university: "", major: "", subjects: "", note: "",
-  yearRecords: [{ year: defaultYear, enrollment: null, scoreLine: null }],
+  yearRecords: [{ year: defaultYear, enrollment: null, scoreLine: null, retakeRatio: null, avgScore: null }],
 });
 const editingId = ref("");
 const editForm = reactive({
@@ -27,6 +27,8 @@ const exportRows = computed(() => {
         考试科目: item.subjects,
         招生人数: yr.enrollment || "--",
         复试线: yr.scoreLine || "--",
+        复录比: yr.retakeRatio || "--",
+        平均分: yr.avgScore || "--",
         备注: props.fish.tx(item.note),
       });
     });
@@ -35,7 +37,7 @@ const exportRows = computed(() => {
 });
 
 function addYearRow(target) {
-  target.push({ year: defaultYear, enrollment: null, scoreLine: null });
+  target.push({ year: defaultYear, enrollment: null, scoreLine: null, retakeRatio: null, avgScore: null });
 }
 function removeYearRow(target, index) {
   if (target.length > 1) target.splice(index, 1);
@@ -107,6 +109,8 @@ function saveEdit(id) {
               <label>{{ fish.t("年份") }}<input v-model="yr.year" required maxlength="10" /></label>
               <label>{{ fish.t("招生人数") }}<input v-model.number="yr.enrollment" type="number" min="0" /></label>
               <label>{{ fish.t("复试线") }}<input v-model.number="yr.scoreLine" type="number" min="0" /></label>
+              <label>{{ fish.t("复录比") }}<input v-model="yr.retakeRatio" maxlength="20" placeholder="1:1.2" /></label>
+              <label>{{ fish.t("平均分") }}<input v-model.number="yr.avgScore" type="number" min="0" step="0.1" /></label>
               <button type="button" class="small-button" :disabled="form.yearRecords.length <= 1" @click="removeYearRow(form.yearRecords, idx)">{{ fish.t("移除") }}</button>
             </div>
             <button type="button" class="secondary-button" @click="addYearRow(form.yearRecords)">+ {{ fish.t("添加年份") }}</button>
@@ -150,12 +154,14 @@ function saveEdit(id) {
                 </small>
                 <div class="year-data-table">
                   <table>
-                    <thead><tr><th>{{ fish.t("年份") }}</th><th>{{ fish.t("招生人数") }}</th><th>{{ fish.t("复试线") }}</th></tr></thead>
+                    <thead><tr><th>{{ fish.t("年份") }}</th><th>{{ fish.t("招生人数") }}</th><th>{{ fish.t("复试线") }}</th><th>{{ fish.t("复录比") }}</th><th>{{ fish.t("平均分") }}</th></tr></thead>
                     <tbody>
                       <tr v-for="(yr, idx) in item.yearRecords" :key="idx">
                         <td>{{ yr.year }}</td>
                         <td>{{ yr.enrollment || "--" }}</td>
                         <td>{{ yr.scoreLine || "--" }}</td>
+                        <td>{{ yr.retakeRatio || "--" }}</td>
+                        <td>{{ yr.avgScore || "--" }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -164,7 +170,7 @@ function saveEdit(id) {
               </div>
               <div class="row-actions">
                 <button type="button" @click="startEdit(item)">{{ fish.t("编辑") }}</button>
-                <button type="button" @click="fish.deleteById('examAnalyses', item.id)">{{ fish.t("删除") }}</button>
+                <button type="button" class="is-delete" @click="fish.deleteById('examAnalyses', item.id)">{{ fish.t("删除") }}</button>
               </div>
             </template>
           </article>

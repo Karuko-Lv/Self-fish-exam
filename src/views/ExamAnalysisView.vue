@@ -55,7 +55,7 @@ function submit() {
   form.major = "";
   form.subjects = "";
   form.note = "";
-  form.yearRecords = [{ year: defaultYear, enrollment: null, scoreLine: null }];
+  form.yearRecords = [{ year: defaultYear, enrollment: null, scoreLine: null, retakeRatio: null, avgScore: null }];
 }
 
 function startEdit(item) {
@@ -135,6 +135,8 @@ function saveEdit(id) {
                   <label>{{ fish.t("年份") }}<input v-model="yr.year" required maxlength="10" /></label>
                   <label>{{ fish.t("招生人数") }}<input v-model.number="yr.enrollment" type="number" min="0" /></label>
                   <label>{{ fish.t("复试线") }}<input v-model.number="yr.scoreLine" type="number" min="0" /></label>
+                  <label>{{ fish.t("复录比") }}<input v-model="yr.retakeRatio" maxlength="20" placeholder="1:1.2" /></label>
+                  <label>{{ fish.t("平均分") }}<input v-model.number="yr.avgScore" type="number" min="0" step="0.1" /></label>
                   <button type="button" class="small-button" :disabled="editForm.yearRecords.length <= 1" @click="removeYearRow(editForm.yearRecords, idx)">{{ fish.t("移除") }}</button>
                 </div>
                 <button type="button" class="secondary-button" @click="addYearRow(editForm.yearRecords)">+ {{ fish.t("添加年份") }}</button>

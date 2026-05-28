@@ -145,7 +145,9 @@ function handleAvatarUpload(event) {
       </div>
     </aside>
     <main class="main-content">
-      <component :is="currentComponent" :fish="props.fish" />
+      <KeepAlive include="TimerView">
+        <component :is="currentComponent" :fish="props.fish" />
+      </KeepAlive>
     </main>
   </div>
 </template>

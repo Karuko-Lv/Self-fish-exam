@@ -1,11 +1,32 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import ExportActions from "../components/ExportActions.vue";
 import { statusList, subjects } from "../constants/defaults.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
+const activeSubject = ref(subjects[0].id);
 
 const statusById = Object.fromEntries(statusList.map((status) => [status.id, status]));
+const subjectById = Object.fromEntries(subjects.map((s) => [s.id, s]));
+
+const currentTopics = computed(() => props.fish.state.topicState[activeSubject.value] || []);
+const currentSubject = computed(() => subjectById[activeSubject.value]);
+
+const progress = computed(() => {
+  const topics = currentTopics.value;
+  if (!topics.length) return 0;
+  const done = topics.filter((t) => t.status === "mastered" || t.status === "review").length;
+  return Math.round((done / topics.length) * 100);
+});
+
+const allSubjectStats = computed(() =>
+  subjects.map((s) => {
+    const topics = props.fish.state.topicState[s.id] || [];
+    const done = topics.filter((t) => t.status === "mastered" || t.status === "review").length;
+    return { id: s.id, name: s.name, accent: s.accent, done, total: topics.length, pct: topics.length ? Math.round((done / topics.length) * 100) : 0 };
+  }),
+);
+
 const exportRows = computed(() =>
   subjects.flatMap((subject) =>
     props.fish.state.topicState[subject.id].map((topic) => ({
@@ -33,35 +54,49 @@ function nextStatusId(currentStatus) {
         <ExportActions :title="fish.t('全科进度')" :payload="fish.state.topicState" :rows="exportRows" />
       </div>
     </div>
+
+    <nav class="subject-tabs">
+      <button
+        v-for="stat in allSubjectStats"
+        :key="stat.id"
+        class="subject-tab"
+        :class="{ 'is-active': activeSubject === stat.id }"
+        :style="activeSubject === stat.id ? { '--subject-accent': stat.accent, borderColor: stat.accent, background: stat.accent + '14' } : {}"
+        @click="activeSubject = stat.id"
+      >
+        <span class="subject-tab-name">{{ fish.t(stat.name) }}</span>
+        <span class="subject-tab-stat">{{ stat.done }}/{{ stat.total }}</span>
+      </button>
+    </nav>
+
     <section class="panel progress-board">
       <div class="panel-header">
         <div>
-          <p class="panel-kicker">Overview</p>
+          <p class="panel-kicker">{{ fish.t(currentSubject.name) }}</p>
           <h3>{{ fish.t("知识点状态总览") }}</h3>
         </div>
         <span class="metric-pill">{{ fish.promptFor('map') }}</span>
       </div>
-      <div class="progress-matrix">
-        <section v-for="subject in subjects" :key="subject.id" class="subject-lane">
-          <div class="subject-lane-header" :style="{ '--subject-accent': subject.accent }">
-            <strong>{{ fish.t(subject.name) }}</strong>
-            <span>{{ fish.state.topicState[subject.id].filter((topic) => topic.status === 'mastered' || topic.status === 'review').length }}/{{ fish.state.topicState[subject.id].length }}</span>
-          </div>
-          <div class="topic-chip-grid">
-            <button
-              v-for="topic in fish.state.topicState[subject.id]"
-              :key="topic.id"
-              class="topic-chip"
-              :class="`is-${topic.status}`"
-              type="button"
-              :title="`${fish.t('点击切换状态：')}${fish.t(topic.name)}`"
-              @click="fish.updateTopicStatus(subject.id, topic.id, nextStatusId(topic.status))"
-            >
-              <span>{{ fish.t(topic.name) }}</span>
-              <em>{{ fish.t(statusById[topic.status]?.label) }}</em>
-            </button>
-          </div>
-        </section>
+
+      <div class="subject-progress-bar">
+        <div class="progress-track">
+          <div class="progress-fill" :style="{ width: progress + '%', background: currentSubject.accent }"></div>
+        </div>
+        <span class="progress-label">{{ progress }}%</span>
+      </div>
+
+      <div class="topic-chip-grid subject-detail-grid">
+        <button
+          v-for="topic in currentTopics"
+          :key="topic.id"
+          class="topic-chip"
+          :class="`is-${topic.status}`"
+          type="button"
+          @click="fish.updateTopicStatus(activeSubject, topic.id, nextStatusId(topic.status))"
+        >
+          <span>{{ fish.t(topic.name) }}</span>
+          <em>{{ fish.t(statusById[topic.status]?.label) }}</em>
+        </button>
       </div>
     </section>
   </section>

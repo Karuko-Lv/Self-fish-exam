@@ -62,7 +62,7 @@ export function exportPdf(title, rows) {
     <meta charset="UTF-8" />
     <title>${escapeHtml(title)}</title>
     <style>
-      body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; margin: 32px; color: #3a2730; }
+      body { font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; margin: 32px; color: #3a2730; }
       h1 { color: #c63470; margin-bottom: 6px; }
       .meta { color: #8a6875; margin-bottom: 24px; }
       .row { page-break-inside: avoid; border: 1px solid #f5c7d8; border-radius: 8px; padding: 14px; margin-bottom: 12px; }

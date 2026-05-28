@@ -1,5 +1,5 @@
 import { computed, reactive, ref, watch } from "vue";
-import { subjects } from "../constants/defaults.js";
+import { timerSubjects } from "../constants/defaults.js";
 import { translateMessage } from "../i18n/messages.js";
 import { ensureBilingualText, setBilingualText, setChineseSourceText, textValue } from "../i18n/userText.js";
 import { daysUntil, startOfWeek, studyDayISO, todayISO } from "../utils/dates.js";
@@ -14,6 +14,8 @@ const bilingualFieldsByCollection = {
   pomodoroLogs: ["mode", "note"],
   distractionLogs: ["text"],
   knowledgeReviews: ["topic", "summary"],
+  examAnalyses: ["university", "major", "note"],
+  expenses: ["note"],
   ideas: ["text", "reason"],
 };
 
@@ -146,7 +148,7 @@ export function useSelfFishState(user, showToast) {
   }
 
   function subjectName(id) {
-    const subject = subjects.find((item) => item.id === id);
+    const subject = timerSubjects.find((item) => item.id === id);
     return subject ? t(subject.name) : id;
   }
 
@@ -367,6 +369,25 @@ export function useSelfFishState(user, showToast) {
     });
   }
 
+  function addExamAnalysis(payload) {
+    state.examAnalyses.unshift({
+      id: uid("ea"),
+      date: today.value,
+      createdAt: new Date().toISOString(),
+      ...withBilingualFields(payload, bilingualFieldsByCollection.examAnalyses),
+    });
+  }
+
+  function addExpense(payload) {
+    state.expenses.unshift({
+      id: uid("exp"),
+      date: today.value,
+      createdAt: new Date().toISOString(),
+      type: payload.type === "income" ? "income" : "expense",
+      ...withBilingualFields(payload, bilingualFieldsByCollection.expenses),
+    });
+  }
+
   function toggleKnowledgeReviewReviewed(id) {
     const item = state.knowledgeReviews.find((review) => review.id === id);
     if (item) item.reviewed = !item.reviewed;
@@ -504,6 +525,8 @@ export function useSelfFishState(user, showToast) {
     addDistraction,
     toggleDistraction,
     addKnowledgeReview,
+    addExamAnalysis,
+    addExpense,
     toggleKnowledgeReviewReviewed,
     addIdea,
     convertIdeaToTask,

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { moods, shortPoolLines, subjects } from "../constants/defaults.js";
+import { daysUntil } from "../utils/dates.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
 const focusForm = reactive({ subject: "ds", startTime: "08:00", endTime: "08:25", note: "" });
@@ -16,6 +17,8 @@ const nextCountdown = computed(() =>
   [...props.fish.state.countdownEvents]
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0],
 );
+
+const nextCountdownDays = computed(() => (nextCountdown.value ? daysUntil(nextCountdown.value.date, now.value) : 0));
 
 const todayLabel = computed(() =>
   now.value.toLocaleDateString(props.fish.language.value === "en" ? "en-US" : "zh-CN", {
@@ -127,19 +130,27 @@ onBeforeUnmount(() => window.clearInterval(clockTimer));
           <div><strong>{{ fish.todayDistractions.value }}</strong><span>{{ fish.t("今日分心") }}</span></div>
         </div>
         <div v-if="nextCountdown" class="next-card">
-          <strong>
-            <BilingualTextEditor
-              :fish="fish"
-              :value="nextCountdown.title"
-              @save="(text) => fish.updateTranslation('countdownEvents', nextCountdown.id, 'title', text)"
-            />
-          </strong>
-          <span>{{ nextCountdown.date }}</span>
-          <ul class="todo-preview-list" v-if="nextCountdown.todos?.length">
-            <li v-for="todo in nextCountdown.todos.slice(0, 3)" :key="todo.id" :class="{ done: todo.done }">
-              {{ fish.tx(todo.text) }}
-            </li>
-          </ul>
+          <div class="next-card-main">
+            <div class="next-card-heading">
+              <strong class="next-card-title">
+                <BilingualTextEditor
+                  :fish="fish"
+                  :value="nextCountdown.title"
+                  @save="(text) => fish.updateTranslation('countdownEvents', nextCountdown.id, 'title', text)"
+                />
+              </strong>
+              <span class="next-card-date">{{ nextCountdown.date }}</span>
+            </div>
+            <ul class="todo-preview-list" v-if="nextCountdown.todos?.length">
+              <li v-for="todo in nextCountdown.todos.slice(0, 3)" :key="todo.id" :class="{ done: todo.done }">
+                {{ fish.tx(todo.text) }}
+              </li>
+            </ul>
+          </div>
+          <div class="next-card-days">
+            <strong>{{ nextCountdownDays }}</strong>
+            <span>{{ fish.t("天") }}</span>
+          </div>
         </div>
       </section>
 

@@ -4,6 +4,8 @@ import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { breakSuggestions, timerSubjects } from "../constants/defaults.js";
 
+defineOptions({ name: "TimerView" });
+
 const props = defineProps({ fish: { type: Object, required: true } });
 const timer = reactive({ mode: "专注", direction: "down", seconds: 25 * 60, remaining: 25 * 60, running: false, note: "", subject: "ds" });
 const editingId = ref("");

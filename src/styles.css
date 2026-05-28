@@ -291,6 +291,57 @@ h3 { margin-bottom: 0; font-size: 1.05rem; }
   border: 1px solid var(--line);
   background: var(--surface-2);
 }
+.next-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+.next-card-main {
+  min-width: 0;
+}
+.next-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.next-card-title {
+  min-width: 0;
+}
+.next-card-date {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.next-card-days {
+  justify-self: end;
+  min-width: 70px;
+  padding: 8px 10px;
+  border: 1px solid #f0a8c2;
+  border-radius: var(--radius);
+  background: #fff;
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  line-height: 1;
+}
+.next-card-days strong {
+  color: var(--pink-dark);
+  font-size: 1.8rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+.next-card-days span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+.recommend-box {
+  margin: 16px 0 0;
+  line-height: 1.65;
+}
 .hero-stats strong { display: block; font-size: 1.4rem; color: var(--pink-dark); }
 .todo-preview-list {
   margin: 8px 0 0;

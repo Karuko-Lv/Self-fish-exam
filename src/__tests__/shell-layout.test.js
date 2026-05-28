@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const appShell = readFileSync(new URL("../components/AppShell.vue", import.meta.url), "utf8");
+const timerView = readFileSync(new URL("../views/TimerView.vue", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 
 function declarationsFor(selector) {
@@ -32,5 +33,10 @@ describe("desktop shell layout", () => {
     expect(appShell).toContain("avatarSrc");
     expect(styles).toMatch(/\.avatar-upload-button\s*{/);
     expect(styles).toMatch(/\.avatar-photo\s*{/);
+  });
+
+  it("keeps the Pomodoro timer mounted while navigating to other views", () => {
+    expect(timerView).toContain('defineOptions({ name: "TimerView" })');
+    expect(appShell).toMatch(/<KeepAlive\s+include="TimerView">\s*<component\s+:is="currentComponent"\s+:fish="props\.fish"\s*\/>\s*<\/KeepAlive>/s);
   });
 });

@@ -176,8 +176,10 @@ function normalizeExamAnalyses(input) {
           year: yr.year || String(new Date().getFullYear()),
           enrollment: Number(yr.enrollment || 0),
           scoreLine: Number(yr.scoreLine || 0),
+          retakeRatio: yr.retakeRatio || null,
+          avgScore: yr.avgScore != null ? Number(yr.avgScore) : null,
         }))
-      : [{ year: item.year || String(new Date().getFullYear()), enrollment: Number(item.enrollment || 0), scoreLine: Number(item.scoreLine || 0) }];
+      : [{ year: item.year || String(new Date().getFullYear()), enrollment: Number(item.enrollment || 0), scoreLine: Number(item.scoreLine || 0), retakeRatio: item.retakeRatio || null, avgScore: item.avgScore != null ? Number(item.avgScore) : null }];
     return {
       id: item.id || `ea-${index}`,
       university: ensureBilingualText(item.university || ""),

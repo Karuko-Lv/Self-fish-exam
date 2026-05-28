@@ -245,6 +245,7 @@ function discardTimeout() {
 const analysisRange = ref("week");
 const analysisStart = ref("");
 const analysisEnd = ref("");
+const showStudyOnly = ref(false);
 
 const pinkPalette = ["#E56A75", "#C84C5F", "#FFBBC0", "#F4A6A8", "#FECBD1", "#FFDDCA", "#AAC1B1", "#C44339", "#661F26"];
 
@@ -335,7 +336,9 @@ const analysisFiltered = computed(() => {
   else if (analysisRange.value === "week") { start = daysAgo(6); end = todayISO(); }
   else if (analysisRange.value === "month") { start = daysAgo(29); end = todayISO(); }
   else { start = analysisStart.value || daysAgo(6); end = analysisEnd.value || todayISO(); }
-  return props.fish.state.pomodoroLogs.filter((l) => l.date >= start && l.date <= end);
+  let logs = props.fish.state.pomodoroLogs.filter((l) => l.date >= start && l.date <= end);
+  if (showStudyOnly.value) logs = logs.filter((l) => l.subject !== "nonStudy");
+  return logs;
 });
 
 const analysisStats = computed(() => {
@@ -503,6 +506,7 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
           <button class="filter-chip" :class="{ 'is-active': analysisRange === 'month' }" @click="analysisRange = 'month'">{{ fish.t("月") }}</button>
           <button class="filter-chip" :class="{ 'is-active': analysisRange === 'custom' }" @click="analysisRange = 'custom'">{{ fish.t("自定义") }}</button>
         </div>
+        <button class="filter-chip" :class="{ 'is-active': showStudyOnly }" @click="showStudyOnly = !showStudyOnly">{{ fish.t("学习") }}</button>
       </div>
       <div v-if="analysisRange === 'custom'" class="analysis-custom-row">
         <label>{{ fish.t("起始") }}<input v-model="analysisStart" type="date" /></label>

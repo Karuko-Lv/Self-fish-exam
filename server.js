@@ -419,6 +419,37 @@ function startServer() {
   const users = defaultUsers();
   console.log("BOOT: users configured, creating server...");
   const server = createAppServer(users);
+  let isListening = false;
+  let isShuttingDown = false;
+
+  function shutdown(signal) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`BOOT: received ${signal}, shutting down gracefully...`);
+
+    if (!isListening) {
+      process.exit(0);
+      return;
+    }
+
+    const forceExitTimer = setTimeout(() => {
+      console.error("BOOT: forced shutdown after timeout.");
+      process.exit(1);
+    }, 10000);
+    forceExitTimer.unref();
+
+    server.close((error) => {
+      if (error) {
+        console.error("BOOT: server shutdown failed:", error);
+        process.exit(1);
+        return;
+      }
+
+      clearTimeout(forceExitTimer);
+      console.log("BOOT: server closed.");
+      process.exit(0);
+    });
+  }
 
   process.on("uncaughtException", (error) => {
     console.error("FATAL uncaughtException:", error);
@@ -428,6 +459,8 @@ function startServer() {
     console.error("FATAL unhandledRejection:", reason);
     process.exit(1);
   });
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE") {
@@ -442,6 +475,7 @@ function startServer() {
   });
 
   server.listen(PORT, "0.0.0.0", () => {
+    isListening = true;
     console.log(`Self-fish is running at http://0.0.0.0:${PORT}`);
     console.log(`Data directory: ${DATA_DIR}`);
     console.log(`Configured users: ${users.map((user) => user.username).join(", ")}`);

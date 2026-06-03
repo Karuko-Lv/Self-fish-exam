@@ -87,7 +87,7 @@ SELF_FISH_USERS=[{"id":"fish","name":"小小鱼","username":"fish","password":"�
 `railway.json` 已配置：
 
 - 构建命令：`npm run build`
-- 启动命令：`npm start`
+- 启动命令：`node server.js`
 - 健康检查：`/api/health`
 
 ## 已有功能

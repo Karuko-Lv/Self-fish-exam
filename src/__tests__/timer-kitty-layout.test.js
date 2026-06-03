@@ -26,11 +26,29 @@ describe("kitty pomodoro timer layout", () => {
     expect(timerView).not.toMatch(/heart/i);
   });
 
-  it("keeps the existing Pomodoro action buttons unchanged", () => {
+  it("renders stopwatch and flexible countdown controls", () => {
+    expect(timerView).toContain('const COUNTDOWN_PRESETS = [');
+    expect(timerView).toContain('{ minutes: 25, mode: "专注" }');
+    expect(timerView).toContain('function setCountUp()');
+    expect(timerView).toContain('function applyCustomCountdown()');
+    expect(timerView).toContain('@click="setCountUp"');
+    expect(timerView).toContain('@click="setCountdownPreset(preset)"');
+    expect(timerView).toContain('<div v-if="timer.direction === \'down\'" class="preset-row">');
+    expect(timerView).toContain('v-model="customCountdown.hours"');
+    expect(timerView).toContain('v-model="customCountdown.minutes"');
+    expect(timerView).toContain('v-model="customCountdown.seconds"');
     expect(timerView).toContain('<button class="primary-button" type="button" @click="start">{{ fish.t("开始") }}</button>');
     expect(timerView).toContain('<button class="secondary-button" type="button" @click="pause">{{ fish.t("暂停") }}</button>');
     expect(timerView).toContain('<button class="secondary-button" type="button" @click="reset">{{ fish.t("重置") }}</button>');
-    expect(timerView).toContain('<button class="small-button" type="button" @click="complete">{{ fish.t("结束并同步") }}</button>');
+    expect(timerView).toContain('<button class="small-button" type="button" @click="complete">{{ fish.t("确认结束") }}</button>');
+  });
+
+  it("keeps countdowns running into overtime until manual confirmation", () => {
+    expect(timerView).toContain('const timerOvertime = computed(() => timer.direction === "down" && remainingSeconds.value < 0)');
+    expect(timerView).toContain('已超时 {time}，确认结束时记录完整总时长');
+    expect(timerView).toContain("const minutes = Math.max(1, Math.ceil(elapsed / 60))");
+    expect(timerView).not.toContain("completeCurrentPhase");
+    expect(timerView).not.toContain("POMODORO_ROUND_SIZE");
   });
 
   it("defines responsive Kitty timer CSS without circularizing action buttons", () => {

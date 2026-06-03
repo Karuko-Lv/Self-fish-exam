@@ -3,6 +3,7 @@ import { computed, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { examFrequencyOptions, knowledgeReviewCauses, subjects } from "../constants/defaults.js";
+import { handleBoldKeydown } from "../utils/textFormat.js";
 import { todayISO } from "../utils/dates.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
@@ -74,7 +75,7 @@ function saveEdit(id) {
           <label>{{ fish.t("卡点") }}<select v-model="form.cause"><option v-for="cause in knowledgeReviewCauses" :key="cause">{{ fish.t(cause) }}</option></select></label>
           <label>{{ fish.t("考频") }}<select v-model="form.frequency"><option value="">{{ fish.t("不选") }}</option><option v-for="f in examFrequencyOptions" :key="f" :value="f">{{ fish.t(f) }}</option></select></label>
           <label>{{ fish.t("下次复习") }}<input v-model="form.reviewDate" type="date" required /></label>
-          <label>{{ fish.t("一句话复盘") }}<textarea v-model="form.summary" rows="4" required maxlength="180"></textarea></label>
+          <label>{{ fish.t("一句话复盘") }}<textarea v-model="form.summary" rows="4" required maxlength="180" @keydown="handleBoldKeydown"></textarea></label>
           <button class="primary-button">{{ fish.t("放进复盘池") }}</button>
         </form>
       </section>
@@ -105,11 +106,11 @@ function saveEdit(id) {
               <label>{{ fish.t("卡点") }}<select v-model="editForm.cause"><option v-for="cause in knowledgeReviewCauses" :key="cause">{{ fish.t(cause) }}</option></select></label>
               <label>{{ fish.t("考频") }}<select v-model="editForm.frequency"><option value="">{{ fish.t("不选") }}</option><option v-for="f in examFrequencyOptions" :key="f" :value="f">{{ fish.t(f) }}</option></select></label>
               <label>{{ fish.t("下次复习") }}<input v-model="editForm.reviewDate" type="date" required /></label>
-              <label class="wide-field">{{ fish.t("复盘记录") }}<textarea v-model="editForm.summary" rows="3" maxlength="180"></textarea></label>
+              <label class="wide-field">{{ fish.t("复盘记录") }}<textarea v-model="editForm.summary" rows="3" maxlength="180" @keydown="handleBoldKeydown"></textarea></label>
               <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="editingId = ''">{{ fish.t("取消") }}</button></div>
             </form>
             <template v-else>
-              <div><strong><BilingualTextEditor :fish="fish" :value="item.topic" @save="(text) => fish.updateTranslation('knowledgeReviews', item.id, 'topic', text)" /></strong><small class="knowledge-meta"><span>{{ fish.subjectName(item.subject) }} · {{ fish.t(item.cause) }} · {{ item.reviewDate }}</span><span v-if="item.frequency" class="freq-tag" :class="'freq-' + item.frequency">{{ fish.t(item.frequency) }}</span></small><p><BilingualTextEditor :fish="fish" :value="item.summary" textarea @save="(text) => fish.updateTranslation('knowledgeReviews', item.id, 'summary', text)" /></p></div>
+              <div><strong><BilingualTextEditor :fish="fish" :value="item.topic" @save="(text) => fish.updateTranslation('knowledgeReviews', item.id, 'topic', text)" /></strong><small class="knowledge-meta"><span>{{ fish.subjectName(item.subject) }} · {{ fish.t(item.cause) }} · {{ item.reviewDate }}</span><span v-if="item.frequency" class="freq-tag" :class="'freq-' + item.frequency">{{ fish.t(item.frequency) }}</span></small><p><BilingualTextEditor :fish="fish" :value="item.summary" textarea @save="(text) => fish.updateTranslation('knowledgeReviews', item.id, 'summary', text)" v-slot="{ text }"><span v-html="fish.renderBold(text)"></span></BilingualTextEditor></p></div>
               <div class="row-actions">
                 <button @click="fish.toggleKnowledgeReviewReviewed(item.id)">{{ item.reviewed ? fish.t('取消') : fish.t('已复盘') }}</button>
                 <button @click="startEdit(item)">{{ fish.t("编辑") }}</button>

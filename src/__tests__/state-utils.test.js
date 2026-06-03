@@ -74,6 +74,30 @@ describe("state utilities", () => {
     ]);
   });
 
+  it("normalizes paged plan todos as checkbox items", () => {
+    const state = normalizeState({
+      pagedPlan: {
+        days: 1,
+        pages: [
+          {
+            id: "day-1",
+            day: 1,
+            title: "第一天",
+            todos: [
+              { id: "todo-1", text: "整理错题", done: true },
+              { text: "完成英语阅读复盘" },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(state.pagedPlan.pages[0].todos).toEqual([
+      { id: "todo-1", text: { zh: "整理错题", en: "Review mistakes" }, done: true },
+      { id: "day-1-todo-1", text: { zh: "完成英语阅读复盘", en: "Complete English reading review" }, done: false },
+    ]);
+  });
+
   it("migrates old mistakes into knowledge reviews", () => {
     const state = normalizeState({
       mistakes: [

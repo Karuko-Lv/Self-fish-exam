@@ -28,6 +28,62 @@ export const knowledgeReviewCauses = ["概念不清", "公式不会", "题意误
 
 export const examFrequencyOptions = ["高频", "中频", "低频", "未考"];
 
+export const questionTypes = {
+  ds: ["选择题", "简答题", "算法设计题", "综合分析题"],
+  co: ["选择题", "简答题", "计算题", "分析设计题"],
+  os: ["选择题", "简答题", "计算题", "综合分析题"],
+  net: ["选择题", "简答题", "计算题", "综合分析题"],
+  math1: ["选择题", "填空题", "解答题", "证明题"],
+  english1: ["阅读题", "新题型", "翻译题", "完形填空", "写作题"],
+};
+
+export const reviewResults = [
+  { id: "mastered", label: "已掌握", emoji: "&#x2705;" },
+  { id: "improving", label: "有进步", emoji: "&#x1F331;" },
+  { id: "struggling", label: "仍困难", emoji: "&#x26A0;" },
+];
+
+export const mindMapGroups = subjects.map((subject) => ({
+  id: subject.id,
+  label: subject.name,
+  subjects: [subject.id],
+}));
+
+export const subjectMindMapBranches = {
+  ds: [
+    { id: "linear", label: "线性结构", topics: ["绪论与复杂度", "线性表", "栈", "队列", "串与数组"] },
+    { id: "tree-graph", label: "树图模型", topics: ["树的基本概念", "二叉树与遍历", "树与森林", "图的基本概念", "图的遍历与应用"] },
+    { id: "search-sort", label: "查找排序", topics: ["查找", "内部排序"] },
+  ],
+  co: [
+    { id: "data-calc", label: "数据表示与运算", topics: ["计算机系统概述", "数制与编码", "定点运算", "浮点运算", "运算器设计"] },
+    { id: "memory", label: "存储层次", topics: ["存储系统概述", "Cache", "虚拟存储器"] },
+    { id: "cpu", label: "指令与 CPU", topics: ["指令格式与寻址", "CPU 数据通路", "控制器与时序"] },
+    { id: "io", label: "总线与 I/O", topics: ["总线与 I/O"] },
+  ],
+  os: [
+    { id: "process", label: "进程调度", topics: ["OS 概述", "进程概念与状态", "进程同步", "信号量与管程", "死锁", "处理机调度"] },
+    { id: "memory", label: "存储管理", topics: ["内存管理", "虚拟内存", "页面置换"] },
+    { id: "file-io", label: "文件与 I/O", topics: ["文件系统", "磁盘调度", "I/O 子系统"] },
+  ],
+  net: [
+    { id: "foundation", label: "体系与物理", topics: ["网络体系结构", "物理层基础"] },
+    { id: "link", label: "链路与介质", topics: ["数据链路层", "介质访问控制"] },
+    { id: "network", label: "网络层", topics: ["网络层与 IP", "路由协议", "IPv6"] },
+    { id: "transport-app", label: "传输应用", topics: ["传输层", "TCP 可靠传输", "应用层协议", "网络安全基础", "无线网络"] },
+  ],
+  math1: [
+    { id: "calculus", label: "高数主线", topics: ["函数极限连续", "一元微分学", "一元积分学", "多元微分学", "多重积分", "曲线曲面积分", "无穷级数", "常微分方程"] },
+    { id: "linear", label: "线性代数", topics: ["行列式矩阵", "向量与线性方程组", "特征值与二次型"] },
+    { id: "probability", label: "概率统计", topics: ["概率论与数理统计"] },
+  ],
+  english1: [
+    { id: "reading", label: "阅读翻译", topics: ["阅读 Part A", "新题型 Part B", "翻译 Part C", "完形填空"] },
+    { id: "writing", label: "写作输出", topics: ["小作文", "大作文"] },
+    { id: "foundation", label: "基础能力", topics: ["词汇基础", "长难句训练", "真题精读", "模拟冲刺"] },
+  ],
+};
+
 export const distractionTypes = {
   idea: "新想法",
   phone: "手机/消息",
@@ -35,6 +91,17 @@ export const distractionTypes = {
   task: "杂事",
   other: "其他",
 };
+
+export const checkinKinds = [
+  { id: "number", label: "记录数值" },
+  { id: "check", label: "完成勾选" },
+];
+
+export const defaultDailyCheckins = [
+  { id: "daily-words", title: "每日背单词", kind: "number", target: 50, unit: "个" },
+  { id: "daily-weight", title: "记录体重", kind: "number", target: 0, unit: "kg" },
+  { id: "daily-reading", title: "每日阅读", kind: "check", target: 1, unit: "" },
+];
 
 
 export const defaultPromptCards = [

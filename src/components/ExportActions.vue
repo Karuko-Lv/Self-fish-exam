@@ -15,14 +15,26 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  pdfExporter: {
+    type: Function,
+    default: null,
+  },
 });
 
 const exportRows = computed(() => props.rows.length ? props.rows : (Array.isArray(props.payload) ? props.payload : [props.payload]));
+
+async function handlePdfExport() {
+  if (props.pdfExporter) {
+    await props.pdfExporter();
+    return;
+  }
+  await exportPdf(props.title, exportRows.value);
+}
 </script>
 
 <template>
   <div class="export-actions" aria-label="导出">
     <button class="small-button" type="button" @click="exportCsv(title, exportRows)">CSV</button>
-    <button class="small-button" type="button" @click="exportPdf(title, exportRows)">PDF</button>
+    <button class="small-button" type="button" @click="handlePdfExport">PDF</button>
   </div>
 </template>

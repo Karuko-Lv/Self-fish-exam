@@ -17,6 +17,8 @@ const bilingualFieldsByCollection = {
   examAnalyses: ["university", "major", "note"],
   expenses: ["note"],
   ideas: ["text", "reason"],
+  inspirations: ["title", "content"],
+  dailyCheckins: ["title", "unit"],
 };
 
 function withBilingualFields(payload, fields) {
@@ -161,6 +163,11 @@ export function useSelfFishState(user, showToast) {
     return textValue(value, "zh");
   }
 
+  function renderBold(value) {
+    const text = typeof value === 'string' ? value : tx(value);
+    return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+
   function subjectName(id) {
     const subject = timerSubjects.find((item) => item.id === id);
     return subject ? t(subject.name) : id;
@@ -188,7 +195,10 @@ export function useSelfFishState(user, showToast) {
   function findWeakSubject() {
     const topic = Object.values(state.topicState)
       .flat()
-      .find((item) => item.status === "wrong" || item.status === "fragile");
+      .find((item) => {
+        const health = deriveHealth(item);
+        return health === "wrong" || health === "fragile";
+      });
     return topic?.id?.split("-")[0] || "ds";
   }
 
@@ -326,9 +336,129 @@ export function useSelfFishState(user, showToast) {
     if (todo) todo.text = setBilingualText(todo.text, "en", nextText);
   }
 
+  function addTopic(subjectId, name, branchId, parentId) {
+    if (!state.topicState[subjectId]) state.topicState[subjectId] = [];
+    const id = uid("topic");
+    state.topicState[subjectId].push({
+      id,
+      name,
+      status: "empty",
+      branchId: branchId || undefined,
+      parentId: parentId || undefined,
+      reviewLog: [],
+    });
+    const branch = state.customBranches[subjectId]?.find((item) => item.id === branchId);
+    if (branch && !branch.topics.includes(id)) branch.topics.push(id);
+    return id;
+  }
+
+  function addBranch(subjectId, label) {
+    if (!state.customBranches[subjectId]) state.customBranches[subjectId] = [];
+    const id = uid("branch");
+    state.customBranches[subjectId].push({
+      id,
+      label: ensureBilingualText(label),
+      topics: [],
+    });
+    return id;
+  }
+
+  function deleteTopic(subjectId, topicId) {
+    const arr = state.topicState[subjectId];
+    if (!arr) return;
+    // Only allow deletion of custom topics (uid-based IDs, not index-based seed topics)
+    if (!topicId.startsWith("topic-")) return;
+    state.topicState[subjectId] = arr.filter((t) => t.id !== topicId);
+    // Also remove from any custom branch's topics array
+    const branches = state.customBranches[subjectId];
+    if (Array.isArray(branches)) {
+      branches.forEach((b) => {
+        b.topics = b.topics.filter((tid) => tid !== topicId);
+      });
+    }
+  }
+
+  function deleteBranch(subjectId, branchId) {
+    const branches = state.customBranches[subjectId];
+    if (!Array.isArray(branches)) return;
+    state.customBranches[subjectId] = branches.filter((b) => b.id !== branchId);
+  }
+
   function updateTopicStatus(subjectId, topicId, status) {
     const topic = state.topicState[subjectId]?.find((item) => item.id === topicId);
     if (topic) topic.status = status;
+  }
+
+  function deriveHealth(topic) {
+    const log = topic.reviewLog;
+    if (!log || !log.length) {
+      return topic.status === 'mastered' || topic.status === 'review' ? 'fragile' : topic.status || 'empty';
+    }
+    const sorted = [...log].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date));
+    const latest = sorted[0];
+    const daysSince = Math.floor((Date.now() - new Date(latest.createdAt || latest.date)) / 86400000);
+
+    if (latest.result === 'mastered') {
+      if (daysSince <= 7) return 'mastered';
+      if (daysSince <= 21) return 'review';
+      return 'fragile';
+    }
+    if (latest.result === 'improving') {
+      if (daysSince <= 14) return 'basic';
+      if (daysSince <= 30) return 'fragile';
+      return 'empty';
+    }
+    if (latest.result === 'struggling') {
+      if (daysSince <= 7) return 'wrong';
+      return 'fragile';
+    }
+    return topic.status || 'empty';
+  }
+
+  function addReviewRecord(subjectId, topicId, payload) {
+    const topic = state.topicState[subjectId]?.find((item) => item.id === topicId);
+    if (!topic) return;
+    if (!Array.isArray(topic.reviewLog)) topic.reviewLog = [];
+    const record = {
+      id: uid('review'),
+      date: today.value,
+      createdAt: new Date().toISOString(),
+      note: ensureBilingualText(payload.note || ''),
+      errorCauses: Array.isArray(payload.errorCauses) ? payload.errorCauses : [],
+      questionTypes: Array.isArray(payload.questionTypes) ? payload.questionTypes : [],
+      result: payload.result || 'improving',
+    };
+    topic.reviewLog.unshift(record);
+    topic.status = deriveHealth(topic);
+    return record;
+  }
+
+  function deleteReviewRecord(subjectId, topicId, reviewId) {
+    const topic = state.topicState[subjectId]?.find((item) => item.id === topicId);
+    if (!topic || !Array.isArray(topic.reviewLog)) return;
+    topic.reviewLog = topic.reviewLog.filter((r) => r.id !== reviewId);
+    topic.status = deriveHealth(topic);
+  }
+
+  function addSubjectOutputRecord(subjectId, branchId, payload) {
+    if (!state.subjectOutputs[subjectId]) state.subjectOutputs[subjectId] = {};
+    if (!Array.isArray(state.subjectOutputs[subjectId][branchId])) state.subjectOutputs[subjectId][branchId] = [];
+    const record = {
+      id: uid("output"),
+      date: today.value,
+      createdAt: new Date().toISOString(),
+      type: payload.type || "concept",
+      topicId: payload.topicId || "",
+      note: ensureBilingualText(payload.note || ""),
+    };
+    state.subjectOutputs[subjectId][branchId].unshift(record);
+    return record;
+  }
+
+  function deleteSubjectOutputRecord(subjectId, branchId, outputId) {
+    const records = state.subjectOutputs[subjectId]?.[branchId];
+    if (!Array.isArray(records)) return;
+    state.subjectOutputs[subjectId][branchId] = records.filter((record) => record.id !== outputId);
   }
 
   function addPracticeLog(payload) {
@@ -421,6 +551,160 @@ export function useSelfFishState(user, showToast) {
     });
   }
 
+  function addDailyCheckin(payload) {
+    state.dailyCheckins.unshift({
+      id: uid("daily-checkin"),
+      createdAt: new Date().toISOString(),
+      title: setChineseSourceText(undefined, payload.title || ""),
+      kind: payload.kind === "check" ? "check" : "number",
+      target: Number(payload.target || 0),
+      unit: setChineseSourceText(undefined, payload.unit || ""),
+      active: true,
+    });
+  }
+
+  function updateDailyCheckin(id, patch) {
+    const item = state.dailyCheckins.find((entry) => entry.id === id);
+    if (!item) return;
+    if ("title" in patch) item.title = setChineseSourceText(item.title, patch.title);
+    if ("unit" in patch) item.unit = setChineseSourceText(item.unit, patch.unit || "");
+    if ("kind" in patch) item.kind = patch.kind === "check" ? "check" : "number";
+    if ("target" in patch) item.target = Number(patch.target || 0);
+    if ("active" in patch) item.active = patch.active !== false;
+  }
+
+  function deleteDailyCheckin(id) {
+    state.dailyCheckins = state.dailyCheckins.filter((item) => item.id !== id);
+    Object.values(state.dailyCheckinLogs).forEach((records) => {
+      if (records && typeof records === "object") delete records[id];
+    });
+  }
+
+  function isDailyCheckinComplete(item, value, explicitDone) {
+    if (!item) return Boolean(explicitDone);
+    if (item.kind === "check") return Boolean(explicitDone);
+    const text = String(value ?? "").trim();
+    if (!text) return Boolean(explicitDone);
+    const amount = Number(text);
+    if (Number(item.target || 0) > 0) return Number.isFinite(amount) && amount >= Number(item.target);
+    return true;
+  }
+
+  function updateDailyCheckinRecord(date, itemId, payload = {}) {
+    const day = date || today.value;
+    const item = state.dailyCheckins.find((entry) => entry.id === itemId);
+    if (!item) return;
+    if (!state.dailyCheckinLogs[day]) state.dailyCheckinLogs[day] = {};
+    const current = state.dailyCheckinLogs[day][itemId] || {};
+    const value = "value" in payload ? String(payload.value ?? "") : current.value || "";
+    const explicitDone = "done" in payload ? payload.done : current.done;
+    state.dailyCheckinLogs[day][itemId] = {
+      itemId,
+      date: day,
+      createdAt: current.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      value,
+      done: isDailyCheckinComplete(item, value, explicitDone),
+      note: "note" in payload ? setChineseSourceText(current.note, payload.note || "") : current.note || setChineseSourceText(undefined, ""),
+    };
+  }
+
+  function toggleDailyCheckinRecord(date, itemId) {
+    const day = date || today.value;
+    const item = state.dailyCheckins.find((entry) => entry.id === itemId);
+    if (!item) return;
+    const current = state.dailyCheckinLogs[day]?.[itemId];
+    const nextDone = !current?.done;
+    const patch = { done: nextDone };
+    if (nextDone && item.kind === "number" && Number(item.target || 0) > 0 && !current?.value) {
+      patch.value = String(item.target);
+    }
+    updateDailyCheckinRecord(day, itemId, patch);
+  }
+
+  function clearDailyCheckinRecord(date, itemId) {
+    const day = date || today.value;
+    if (!state.dailyCheckinLogs[day]) return;
+    delete state.dailyCheckinLogs[day][itemId];
+  }
+
+  function normalizeRequestedPlanDays(value) {
+    const count = Math.floor(Number(value || 0));
+    if (!Number.isFinite(count)) return 1;
+    return Math.min(120, Math.max(1, count));
+  }
+
+  function buildPlanPage(day, existing) {
+    return {
+      id: existing?.id || uid("plan-page"),
+      day,
+      title: existing?.title || setChineseSourceText(undefined, `第 ${day} 天计划`),
+      goal: existing?.goal || setChineseSourceText(undefined, ""),
+      tasks: existing?.tasks || setChineseSourceText(undefined, ""),
+      output: existing?.output || setChineseSourceText(undefined, ""),
+      todos: Array.isArray(existing?.todos) ? existing.todos : [],
+      done: Boolean(existing?.done),
+    };
+  }
+
+  function generatePagedPlan(days) {
+    const count = normalizeRequestedPlanDays(days);
+    const existingByDay = new Map((state.pagedPlan?.pages || []).map((page) => [Number(page.day || 0), page]));
+    state.pagedPlan = {
+      days: count,
+      generatedAt: new Date().toISOString(),
+      pages: Array.from({ length: count }, (_, index) => {
+        const day = index + 1;
+        return buildPlanPage(day, existingByDay.get(day));
+      }),
+    };
+    showToast?.(t("计划已生成。"));
+  }
+
+  function updatePagedPlanPage(id, patch = {}) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === id);
+    if (!page) return;
+    if ("title" in patch) page.title = setChineseSourceText(page.title, patch.title);
+    if ("goal" in patch) page.goal = setChineseSourceText(page.goal, patch.goal);
+    if ("tasks" in patch) page.tasks = setChineseSourceText(page.tasks, patch.tasks);
+    if ("output" in patch) page.output = setChineseSourceText(page.output, patch.output);
+    if ("done" in patch) page.done = Boolean(patch.done);
+  }
+
+  function togglePagedPlanPage(id) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === id);
+    if (page) page.done = !page.done;
+  }
+
+  function addPagedPlanTodo(pageId, text) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === pageId);
+    const cleanText = String(text || "").trim();
+    if (!page || !cleanText) return;
+    if (!Array.isArray(page.todos)) page.todos = [];
+    page.todos.push({
+      id: uid("plan-todo"),
+      text: setChineseSourceText(undefined, cleanText),
+      done: false,
+    });
+  }
+
+  function togglePagedPlanTodo(pageId, todoId) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === pageId);
+    const todo = page?.todos?.find((item) => item.id === todoId);
+    if (todo) todo.done = !todo.done;
+  }
+
+  function updatePagedPlanTodo(pageId, todoId, text) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === pageId);
+    const todo = page?.todos?.find((item) => item.id === todoId);
+    if (todo) todo.text = setChineseSourceText(todo.text, text);
+  }
+
+  function deletePagedPlanTodo(pageId, todoId) {
+    const page = state.pagedPlan?.pages?.find((item) => item.id === pageId);
+    if (page?.todos) page.todos = page.todos.filter((item) => item.id !== todoId);
+  }
+
   function toggleKnowledgeReviewReviewed(id) {
     const item = state.knowledgeReviews.find((review) => review.id === id);
     if (item) item.reviewed = !item.reviewed;
@@ -433,6 +717,16 @@ export function useSelfFishState(user, showToast) {
       createdAt: new Date().toISOString(),
       parked: true,
       ...withBilingualFields(payload, bilingualFieldsByCollection.ideas),
+    });
+  }
+
+  function addInspiration(payload) {
+    state.inspirations.unshift({
+      id: uid("inspiration"),
+      date: today.value,
+      createdAt: new Date().toISOString(),
+      category: payload.category || "梦想生活",
+      ...withBilingualFields(payload, bilingualFieldsByCollection.inspirations),
     });
   }
 
@@ -535,6 +829,7 @@ export function useSelfFishState(user, showToast) {
     t,
     tx,
     textSource,
+    renderBold,
     initialize,
     subjectName,
     maybeResetDailyTasks,
@@ -552,6 +847,15 @@ export function useSelfFishState(user, showToast) {
     updateCountdown,
     updateCountdownTodoTranslation,
     updateTopicStatus,
+    addTopic,
+    addBranch,
+    deleteTopic,
+    deleteBranch,
+    deriveHealth,
+    addReviewRecord,
+    deleteReviewRecord,
+    addSubjectOutputRecord,
+    deleteSubjectOutputRecord,
     addPracticeLog,
     addSentenceLog,
     saveActiveTimer,
@@ -563,8 +867,22 @@ export function useSelfFishState(user, showToast) {
     addKnowledgeReview,
     addExamAnalysis,
     addExpense,
+    addDailyCheckin,
+    updateDailyCheckin,
+    deleteDailyCheckin,
+    updateDailyCheckinRecord,
+    toggleDailyCheckinRecord,
+    clearDailyCheckinRecord,
+    generatePagedPlan,
+    updatePagedPlanPage,
+    togglePagedPlanPage,
+    addPagedPlanTodo,
+    togglePagedPlanTodo,
+    updatePagedPlanTodo,
+    deletePagedPlanTodo,
     toggleKnowledgeReviewReviewed,
     addIdea,
+    addInspiration,
     convertIdeaToTask,
     deleteById,
     importState,

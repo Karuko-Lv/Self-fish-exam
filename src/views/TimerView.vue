@@ -3,15 +3,41 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
 import { timerSubjects } from "../constants/defaults.js";
-import { todayISO } from "../utils/dates.js";
+import { useStudyReminder } from "../composables/useStudyReminder.js";
+import { formatShortDay, shiftISODate, startOfWeek, toLocalISO, todayISO } from "../utils/dates.js";
 
 defineOptions({ name: "TimerView" });
 
 const props = defineProps({ fish: { type: Object, required: true } });
-const timer = reactive({ mode: "专注", direction: "down", seconds: 25 * 60, remaining: 25 * 60, running: false, note: "", subject: "ds", startTime: "" });
+const reminder = useStudyReminder(props.fish, (msg) => props.fish.notify(msg));
+if (typeof window !== 'undefined') window.__testReminder = () => reminder._debugFire();
+const COUNTDOWN_PRESETS = [
+  { minutes: 25, mode: "专注" },
+  { minutes: 5, mode: "短休息" },
+  { minutes: 15, mode: "长休息" },
+  { minutes: 50, mode: "深潜" },
+];
+const DEFAULT_COUNTDOWN_SECONDS = COUNTDOWN_PRESETS[0].minutes * 60;
+
+const timer = reactive({
+  mode: COUNTDOWN_PRESETS[0].mode,
+  direction: "down",
+  seconds: DEFAULT_COUNTDOWN_SECONDS,
+  remaining: DEFAULT_COUNTDOWN_SECONDS,
+  elapsed: 0,
+  running: false,
+  note: "",
+  subject: "ds",
+  startTime: "",
+  _startTimestamp: null,
+});
 const editingId = ref("");
 const expandedLogId = ref("");
 const selectedTimelineTask = ref(null);
+const selectedDate = ref(todayISO());
+const viewMode = ref("day");
+const showDatePicker = ref(false);
+const customCountdown = reactive({ hours: "", minutes: "", seconds: "" });
 const editForm = reactive({ subject: "ds", mode: "专注", note: "", startTime: "", endTime: "" });
 
 function toggleExpand(id) {
@@ -28,54 +54,100 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange);
 
   const saved = props.fish.getActiveTimer();
-  if (!saved || !saved.startTimestamp) return;
+  restoreActiveTimer(saved);
+});
 
-  timer.mode = saved.mode;
-  timer.direction = saved.direction;
-  timer.seconds = saved.seconds;
-  timer.subject = saved.subject;
-  timer.note = saved.note || '';
-  timer.startTime = saved.startTime || '';
-  timer._startTimestamp = saved.startTimestamp || null;
+function formatClockTime(date = new Date()) {
+  return date.toTimeString().slice(0, 8);
+}
 
-  if (saved.running) {
-    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(saved.startTimestamp).getTime()) / 1000));
-    timer.remaining = saved.seconds - elapsed;
-    if (saved.direction === 'down' && timer.remaining <= 0) {
-      timer.remaining = 0;
-      timer.running = false;
-      showTimeoutDialog.value = true;
-      props.fish.clearActiveTimer();
-      return;
-    }
-    timer.running = true;
-    interval = window.setInterval(() => {
-      if (!timer._startTimestamp) return;
-      const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
-      if (timer.direction === 'down') {
-        timer.remaining = Math.max(0, timer.seconds - elapsed);
-        if (timer.remaining <= 0) complete();
-      } else {
-        timer.remaining = timer.seconds - elapsed;
-      }
-    }, 250);
-  } else {
-    timer.remaining = saved.remaining;
-    timer.running = false;
+function formatDurationText(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}${props.fish.t("小时")}`);
+  if (minutes) parts.push(`${minutes}${props.fish.t("分钟")}`);
+  if (secs || !parts.length) parts.push(`${secs}${props.fish.t("秒")}`);
+  return parts.join(" ");
+}
+
+function resetRuntime() {
+  timer.running = false;
+  timer.elapsed = 0;
+  timer.remaining = timer.direction === "down" ? timer.seconds : 0;
+  timer.startTime = "";
+  timer._startTimestamp = null;
+  window.clearInterval(interval);
+  reminder.resetBucket();
+  props.fish.clearActiveTimer();
+}
+
+function configureTimer({ direction, seconds, mode }) {
+  timer.direction = direction;
+  timer.mode = mode;
+  timer.seconds = direction === "down" ? Math.max(1, Number(seconds || 0)) : 0;
+  resetRuntime();
+}
+
+function setCountUp() {
+  configureTimer({ direction: "up", seconds: 0, mode: "正计时" });
+}
+
+function setCountdownPreset(preset) {
+  configureTimer({ direction: "down", seconds: preset.minutes * 60, mode: preset.mode });
+}
+
+function applyCustomCountdown() {
+  const hours = Math.max(0, parseInt(customCountdown.hours || "0", 10) || 0);
+  const minutes = Math.max(0, parseInt(customCountdown.minutes || "0", 10) || 0);
+  const seconds = Math.max(0, parseInt(customCountdown.seconds || "0", 10) || 0);
+  const total = Math.min(24 * 60 * 60, hours * 3600 + minutes * 60 + seconds);
+  if (!total) return;
+  configureTimer({ direction: "down", seconds: total, mode: "自定义" });
+  customCountdown.hours = "";
+  customCountdown.minutes = "";
+  customCountdown.seconds = "";
+}
+
+function getElapsedSeconds() {
+  if (timer.running && timer._startTimestamp) {
+    return Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
   }
+  return Math.max(0, Number(timer.elapsed || 0));
+}
 
-  saveActiveTimerSnapshot();
+const elapsedSeconds = computed(() => {
+  const _trigger = now.value;
+  if (timer.running) return Math.max(0, Number(timer.elapsed || 0));
+  return getElapsedSeconds();
+});
+
+const remainingSeconds = computed(() => {
+  const _trigger = now.value;
+  if (timer.direction === "up") return 0;
+  return timer.seconds - elapsedSeconds.value;
+});
+
+const timerOvertime = computed(() => timer.direction === "down" && remainingSeconds.value < 0);
+
+const timerHint = computed(() => {
+  if (timer.direction === "up") {
+    return props.fish.t("从零开始正计时");
+  }
+  if (timerOvertime.value) {
+    return props.fish.t("已超时 {time}，确认结束时记录完整总时长", { time: formatDurationText(Math.abs(remainingSeconds.value)) });
+  }
+  return props.fish.t("设定 {time}，归零后继续正计时", { time: formatDurationText(timer.seconds) });
 });
 
 const display = computed(() => {
-  const _trigger = now.value;
-  let value;
-  if (timer.running && timer._startTimestamp) {
-    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
-    value = timer.direction === "down" ? Math.max(0, timer.seconds - elapsed) : elapsed;
-  } else {
-    value = timer.direction === "down" ? timer.remaining : Math.max(0, timer.seconds - timer.remaining);
-  }
+  const value = timer.direction === "up"
+    ? elapsedSeconds.value
+    : timerOvertime.value
+      ? Math.abs(remainingSeconds.value)
+      : Math.max(0, remainingSeconds.value);
   const minutes = Math.floor(value / 60);
   const seconds = value % 60;
   return {
@@ -85,8 +157,8 @@ const display = computed(() => {
 });
 
 const timerProgress = computed(() => {
-  if (!timer.seconds) return 0;
-  return Math.min(1, Math.max(0, (timer.seconds - timer.remaining) / timer.seconds));
+  if (timer.direction === "up" || !timer.seconds) return 0;
+  return Math.min(1, Math.max(0, elapsedSeconds.value / timer.seconds));
 });
 
 const exportRows = computed(() =>
@@ -99,21 +171,21 @@ const exportRows = computed(() =>
   })),
 );
 
-const showTimeoutDialog = ref(false);
-
 function onVisibilityChange() {
   if (document.visibilityState === 'visible') {
     now.value = new Date();
+    tickTimer();
   }
 }
 
 function saveActiveTimerSnapshot() {
-  if (!timer.running && timer.remaining === timer.seconds) return;
+  if (!timer.running && getElapsedSeconds() === 0) return;
   props.fish.saveActiveTimer({
     mode: timer.mode,
     direction: timer.direction,
     seconds: timer.seconds,
     remaining: timer.remaining,
+    elapsed: getElapsedSeconds(),
     running: timer.running,
     note: timer.note,
     subject: timer.subject,
@@ -122,53 +194,105 @@ function saveActiveTimerSnapshot() {
   });
 }
 
-function setPreset(minutes, mode) {
-  timer.mode = mode;
-  timer.seconds = minutes * 60;
-  timer.remaining = timer.seconds;
-  timer.running = false;
-  timer._startTimestamp = null;
-  window.clearInterval(interval);
-  props.fish.clearActiveTimer();
+function restoreActiveTimer(saved) {
+  if (!saved || !saved.startTimestamp) return;
+
+  timer.direction = saved.direction === "up" ? "up" : "down";
+  timer.mode = saved.mode || (timer.direction === "up" ? "正计时" : "专注");
+  timer.seconds = timer.direction === "down" ? Math.max(1, Number(saved.seconds || DEFAULT_COUNTDOWN_SECONDS)) : 0;
+  timer.subject = saved.subject || "ds";
+  timer.note = saved.note || "";
+  timer.startTime = saved.startTime || "";
+  timer._startTimestamp = saved.startTimestamp || null;
+
+  if (saved.running) {
+    const startedAt = new Date(saved.startTimestamp).getTime();
+    const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    timer.elapsed = elapsed;
+    timer.remaining = timer.direction === "down" ? timer.seconds - elapsed : 0;
+    timer.running = true;
+    startTimerInterval();
+    reminder.resetBucket();
+  } else {
+    timer.elapsed = Math.max(0, Number(saved.elapsed ?? (timer.direction === "down" ? timer.seconds - Number(saved.remaining ?? timer.seconds) : 0)));
+    timer.remaining = timer.direction === "down" ? timer.seconds - timer.elapsed : 0;
+    timer.running = false;
+  }
+
+  saveActiveTimerSnapshot();
 }
 
 function start() {
   if (timer.running) return;
   timer.running = true;
-  timer.startTime = new Date().toTimeString().slice(0, 8);
-  const alreadyElapsed = timer.seconds - timer.remaining;
+  if (!timer.startTime) timer.startTime = formatClockTime();
+  const alreadyElapsed = getElapsedSeconds();
   timer._startTimestamp = new Date(Date.now() - alreadyElapsed * 1000).toISOString();
-  interval = window.setInterval(() => {
-    if (!timer._startTimestamp) return;
-    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timer._startTimestamp).getTime()) / 1000));
-    if (timer.direction === "down") {
-      timer.remaining = Math.max(0, timer.seconds - elapsed);
-      if (timer.remaining <= 0) complete();
-    } else {
-      timer.remaining = timer.seconds - elapsed;
-    }
-  }, 250);
+  startTimerInterval();
+  reminder.resetBucket();
   saveActiveTimerSnapshot();
 }
 
+function startTimerInterval() {
+  window.clearInterval(interval);
+  interval = window.setInterval(tickTimer, 250);
+}
+
+function tickTimer() {
+  if (!timer.running || !timer._startTimestamp) return;
+  timer.elapsed = getElapsedSeconds();
+  timer.remaining = timer.direction === "down" ? timer.seconds - timer.elapsed : 0;
+  if (timer.mode !== "短休息" && timer.mode !== "长休息" && timer.mode !== "休息") reminder.checkReminder(timer);
+}
+
 function pause() {
+  if (!timer.running) return;
+  timer.elapsed = getElapsedSeconds();
+  timer.remaining = timer.direction === "down" ? timer.seconds - timer.elapsed : 0;
   timer.running = false;
   window.clearInterval(interval);
   saveActiveTimerSnapshot();
 }
 
 function reset() {
-  pause();
-  timer.remaining = timer.seconds;
-  saveActiveTimerSnapshot();
+  timer.running = false;
+  window.clearInterval(interval);
+  timer.elapsed = 0;
+  timer.remaining = timer.direction === "down" ? timer.seconds : 0;
+  timer._startTimestamp = null;
+  timer.startTime = '';
+  reminder.resetBucket();
+  props.fish.clearActiveTimer();
+}
+
+function restartTimer() {
+  reset();
+  start();
 }
 
 function complete() {
-  const minutes = Math.max(1, Math.round((timer.seconds - Math.max(timer.remaining, 0)) / 60));
-  const endTime = new Date().toTimeString().slice(0, 8);
-  props.fish.addPomodoroLog({ subject: timer.subject, minutes, mode: timer.mode, note: timer.note, startTime: timer.startTime, endTime });
+  const elapsed = getElapsedSeconds();
+  if (!elapsed) return;
+  const completedAt = new Date();
+  window.clearInterval(interval);
+  timer.running = false;
+  timer.elapsed = elapsed;
+  timer.remaining = timer.direction === "down" ? timer.seconds - elapsed : 0;
+
+  const minutes = Math.max(1, Math.ceil(elapsed / 60));
+  const endTime = formatClockTime(completedAt);
+  const fallbackStartTime = formatClockTime(new Date(completedAt.getTime() - elapsed * 1000));
+  props.fish.addPomodoroLog({
+    subject: timer.subject,
+    minutes,
+    mode: timer.mode,
+    note: timer.note,
+    startTime: timer.startTime || fallbackStartTime,
+    endTime,
+    date: toLocalISO(completedAt),
+  });
+  props.fish.notify(props.fish.t("已记录完整计时时长。"));
   reset();
-  props.fish.clearActiveTimer();
 }
 
 function startEdit(log) {
@@ -224,48 +348,133 @@ function submitAdd() {
   addingNew.value = false;
 }
 
-function confirmTimeoutComplete() {
-  const minutes = Math.max(1, Math.round(timer.seconds / 60));
-  const endTime = new Date().toTimeString().slice(0, 8);
-  props.fish.addPomodoroLog({
-    subject: timer.subject, minutes, mode: timer.mode,
-    note: timer.note, startTime: timer.startTime, endTime,
-  });
-  showTimeoutDialog.value = false;
-  timer.remaining = timer.seconds;
-  timer._startTimestamp = null;
-}
-
-function discardTimeout() {
-  showTimeoutDialog.value = false;
-  timer.remaining = timer.seconds;
-  timer._startTimestamp = null;
-}
-
 const analysisRange = ref("week");
 const analysisStart = ref("");
 const analysisEnd = ref("");
 const showStudyOnly = ref(false);
 
-const pinkPalette = ["#E56A75", "#C84C5F", "#FFBBC0", "#F4A6A8", "#FECBD1", "#FFDDCA", "#AAC1B1", "#C44339", "#661F26"];
+const pinkPalette = ["#EA7D9D", "#F6B8CE", "#FBEAEF", "#FEF6F0", "#F5E0B5", "#FBD2D0"];
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function darkenHex(hex, amount) {
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.max(0, Math.round(r * (1 - amount)));
+  g = Math.max(0, Math.round(g * (1 - amount)));
+  b = Math.max(0, Math.round(b * (1 - amount)));
+  return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
 
 const subjectPinkMap = computed(() => {
   const map = {};
   const subjects = Object.keys(analysisStats.value.bySubject);
-  subjects.forEach((subj, idx) => {
-    map[subj] = pinkPalette[idx % pinkPalette.length];
+  let pinkIdx = 0;
+  subjects.forEach((subj) => {
+    if (subj === 'nonStudy') {
+      map[subj] = '#8e8e93';
+    } else {
+      map[subj] = pinkPalette[pinkIdx % pinkPalette.length];
+      pinkIdx++;
+    }
   });
   return map;
 });
 
-const todayDoneList = computed(() =>
-  props.fish.state.pomodoroLogs
-    .filter((l) => l.date === todayISO()),
-);
-const todayDoneTotal = computed(() => todayDoneList.value.reduce((s, l) => s + Number(l.minutes || 0), 0));
+const subjectTransparentMap = computed(() => {
+  const map = {};
+  for (const [subj, color] of Object.entries(subjectPinkMap.value)) {
+    const textColor = darkenHex(color, 0.35);
+    map[subj] = {
+      bg: hexToRgba(color, 0.22),
+      border: textColor,
+      text: textColor,
+    };
+  }
+  return map;
+});
 
-const todayTimeline = computed(() => {
-  const logs = todayDoneList.value;
+const isToday = computed(() => selectedDate.value === todayISO());
+
+const doneList = computed(() =>
+  props.fish.state.pomodoroLogs
+    .filter((l) => l.date === selectedDate.value),
+);
+const doneTotal = computed(() => doneList.value.reduce((s, l) => s + Number(l.minutes || 0), 0));
+
+const recentTimerLogs = computed(() => {
+  const start = shiftISODate(todayISO(), -1);
+  const end = todayISO();
+  return props.fish.state.pomodoroLogs
+    .filter((log) => log.date >= start && log.date <= end)
+    .sort((a, b) => {
+      const dateOrder = String(b.date || "").localeCompare(String(a.date || ""));
+      if (dateOrder) return dateOrder;
+      return new Date(b.createdAt || `${b.date}T00:00:00`) - new Date(a.createdAt || `${a.date}T00:00:00`);
+    });
+});
+
+const weekDates = computed(() => {
+  const mon = startOfWeek(new Date(selectedDate.value + "T12:00:00"));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(d.getDate() + i);
+    return toLocalISO(d);
+  });
+});
+
+const weekDoneList = computed(() => {
+  const set = new Set(weekDates.value);
+  return props.fish.state.pomodoroLogs.filter((l) => set.has(l.date));
+});
+
+const weekGrouped = computed(() => {
+  return weekDates.value.map(date => {
+    const logs = weekDoneList.value.filter(l => l.date === date);
+    const total = logs.reduce((s, l) => s + Number(l.minutes || 0), 0);
+    return { date, logs, total };
+  });
+});
+
+const weekTotal = computed(() => weekGrouped.value.reduce((s, d) => s + d.total, 0));
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const PX_PER_HOUR_WEEK = 17;
+
+const weekGrid = computed(() => {
+  return weekDates.value.map((date, dayIdx) => {
+    const logs = weekDoneList.value
+      .filter(l => l.date === date)
+      .map(l => {
+        const sh = l.startTime ? parseInt(l.startTime.split(':')[0]) : 0;
+        const sm = l.startTime ? parseInt(l.startTime.split(':')[1]) || 0 : 0;
+        const startMin = sh * 60 + sm;
+        let endMin;
+        if (l.endTime) {
+          const eh = parseInt(l.endTime.split(':')[0]);
+          const em = parseInt(l.endTime.split(':')[1]) || 0;
+          endMin = eh * 60 + em;
+        } else {
+          endMin = startMin + (l.minutes || 0);
+        }
+        const top = (startMin / 60) * PX_PER_HOUR_WEEK;
+        const height = Math.max(10, ((endMin - startMin) / 60) * PX_PER_HOUR_WEEK);
+        return { ...l, top, height, startMin, endMin };
+      })
+      .sort((a, b) => a.startMin - b.startMin);
+    const total = logs.reduce((s, l) => s + Number(l.minutes || 0), 0);
+    return { date, logs, total };
+  });
+});
+
+const doneTimeline = computed(() => {
+  const logs = doneList.value;
   if (!logs.length) return { hours: [], tasks: [], totalHeight: 0 };
 
   const PX_PER_HOUR = 60;
@@ -312,7 +521,7 @@ const todayTimeline = computed(() => {
   const positioned = laneAssign.map(a => ({
     ...a,
     top: a.startMin - baseMin,
-    height: Math.max(18, a.endMin - a.startMin),
+    height: Math.max(22, a.endMin - a.startMin),
     leftPct: totalLanes > 1 ? 4 + (a.lane / totalLanes) * 92 : 4,
     widthPct: totalLanes > 1 ? (1 / totalLanes) * 92 - 4 : 92,
   }));
@@ -328,6 +537,24 @@ function daysAgo(n) {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+const weekDayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const formattedDate = computed(() => {
+  if (viewMode.value === "week") {
+    const mon = weekDates.value[0];
+    const sun = weekDates.value[6];
+    const m = new Date(mon + "T12:00:00");
+    const s = new Date(sun + "T12:00:00");
+    return `${m.getMonth() + 1}.${m.getDate()} - ${s.getMonth() + 1}.${s.getDate()}`;
+  }
+  const d = new Date(selectedDate.value + "T12:00:00");
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekDayNames[d.getDay()]}`;
+});
+
+function goDay(n) {
+  const step = viewMode.value === "week" ? n * 7 : n;
+  selectedDate.value = shiftISODate(selectedDate.value, step);
 }
 
 const analysisFiltered = computed(() => {
@@ -367,7 +594,7 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
     <div class="topbar"><div><p class="eyebrow">Pomodoro</p><h2>{{ fish.t("番茄钟") }}</h2></div><div class="topbar-actions"><span class="metric-pill">{{ fish.t("今日") }} {{ fish.todayPomodoros.value }} {{ fish.t("组计时") }}</span><ExportActions :title="fish.t('番茄钟记录')" :payload="fish.state.pomodoroLogs" :rows="exportRows" /></div></div>
     <div class="timer-layout">
       <section class="panel timer-panel">
-                <div class="timer-orb kitty-timer" :class="{ 'is-running': timer.running }" :style="{ '--timer-progress': `${timerProgress * 360}deg` }" aria-label="Pomodoro timer">
+                <div class="timer-orb kitty-timer" :class="{ 'is-running': timer.running, 'is-overtime': timerOvertime }" :style="{ '--timer-progress': `${timerProgress * 360}deg` }" aria-label="Pomodoro timer">
           <div class="kitty-timer-head" aria-hidden="true">
             <span class="kitty-timer-ear kitty-timer-ear-left"></span>
             <span class="kitty-timer-ear kitty-timer-ear-right"></span>
@@ -387,40 +614,39 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
           <div class="timer-core">
             <span>{{ fish.t(timer.mode) }}</span>
             <strong class="timer-display"><em class="timer-minutes">{{ display.minutes }}</em><i class="timer-colon">:</i><em class="timer-seconds">{{ display.seconds }}</em></strong>
-            <small>{{ fish.t("小小鱼，先游一段。") }}</small>
+            <small>{{ timerHint }}</small>
           </div>
         </div>
 
         <div class="timer-control-bar">
           <div class="timer-direction-row">
-            <button class="timer-direction-button" :class="{ 'is-active': timer.direction === 'down' }" type="button" @click="timer.direction = 'down'; reset()">{{ fish.t("倒计时") }}</button>
-            <button class="timer-direction-button" :class="{ 'is-active': timer.direction === 'up' }" type="button" @click="timer.direction = 'up'; reset()">{{ fish.t("正计时") }}</button>
+            <button class="timer-direction-button" :class="{ 'is-active': timer.direction === 'up' }" type="button" @click="setCountUp">{{ fish.t("正计时") }}</button>
+            <button class="timer-direction-button" :class="{ 'is-active': timer.direction === 'down' }" type="button" @click="setCountdownPreset(COUNTDOWN_PRESETS[0])">{{ fish.t("倒计时") }}</button>
           </div>
-          <span class="timer-control-divider" aria-hidden="true"></span>
-          <div class="preset-row">
-            <button class="preset-button" type="button" @click="setPreset(25, '专注')">25<span>{{ fish.t("专注") }}</span></button>
-            <button class="preset-button" type="button" @click="setPreset(5, '休息')">5<span>{{ fish.t("休息") }}</span></button>
-            <button class="preset-button" type="button" @click="setPreset(50, '深潜')">50<span>{{ fish.t("深潜") }}</span></button>
+          <span v-if="timer.direction === 'down'" class="timer-control-divider" aria-hidden="true"></span>
+          <div v-if="timer.direction === 'down'" class="preset-row">
+            <button v-for="preset in COUNTDOWN_PRESETS" :key="preset.mode + preset.minutes" class="preset-button" type="button" @click="setCountdownPreset(preset)">{{ preset.minutes }}<span>{{ fish.t(preset.mode) }}</span></button>
+            <div class="custom-preset custom-countdown">
+              <input v-model="customCountdown.hours" type="number" min="0" max="24" inputmode="numeric" :aria-label="fish.t('小时')" :placeholder="fish.t('时')" @keyup.enter="applyCustomCountdown" />
+              <input v-model="customCountdown.minutes" type="number" min="0" max="59" inputmode="numeric" :aria-label="fish.t('分钟')" :placeholder="fish.t('分')" @keyup.enter="applyCustomCountdown" />
+              <input v-model="customCountdown.seconds" type="number" min="0" max="59" inputmode="numeric" :aria-label="fish.t('秒')" :placeholder="fish.t('秒')" @keyup.enter="applyCustomCountdown" />
+              <button type="button" @click="applyCustomCountdown">{{ fish.t("自定义") }}</button>
+            </div>
           </div>
         </div>
         <div class="timer-fields">
           <label>{{ fish.t("科目") }}<select v-model="timer.subject"><option v-for="s in timerSubjects" :key="s.id" :value="s.id">{{ fish.t(s.name) }}</option></select></label>
           <label>{{ fish.t("这颗番茄做什么") }}<input v-model="timer.note" maxlength="60" :placeholder="fish.t('写写要做什么...')" /></label>
         </div>
+        <div v-if="reminder.permissionState.value === 'default'" class="notification-permission-row">
+          <button class="small-button" type="button" @click="reminder.requestPermission()">{{ fish.t("开启提醒") }}</button>
+          <span class="notification-permission-hint">{{ fish.t("开启浏览器通知，切到其他页面也能收到学习提醒") }}</span>
+        </div>
         <div class="timer-actions">
           <button class="primary-button" type="button" @click="start">{{ fish.t("开始") }}</button>
           <button class="secondary-button" type="button" @click="pause">{{ fish.t("暂停") }}</button>
           <button class="secondary-button" type="button" @click="reset">{{ fish.t("重置") }}</button>
-          <button class="small-button" type="button" @click="complete">{{ fish.t("结束并同步") }}</button>
-        </div>
-        <div v-if="showTimeoutDialog" class="timeout-overlay">
-          <div class="timeout-dialog">
-            <p>{{ fish.t("计时器已在您离开期间完成。") }}</p>
-            <div class="timeout-dialog-actions">
-              <button class="primary-button" type="button" @click="confirmTimeoutComplete">{{ fish.t("确认完成") }}</button>
-              <button class="secondary-button" type="button" @click="discardTimeout">{{ fish.t("放弃本次") }}</button>
-            </div>
-          </div>
+          <button class="small-button" type="button" @click="complete">{{ fish.t("确认结束") }}</button>
         </div>
       </section>
       <div class="timer-right-col">
@@ -429,47 +655,95 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
           <form class="quick-form" @submit.prevent="fish.addDistraction({ text: $event.target.elements.quick.value, type: 'idea', source: 'timer' }); $event.target.reset()"><input name="quick" maxlength="80" :placeholder="fish.t('脑子飘走了？先写在这里。')" /><button class="small-button">{{ fish.t("停住") }}</button></form>
         </section>
         <section class="panel donelist-panel">
+          <div class="date-nav">
+            <button class="date-nav-arrow" @click="goDay(-1)" :title="fish.t('前一天')">&lsaquo;</button>
+            <span class="date-nav-label" @click="showDatePicker = !showDatePicker">{{ formattedDate }}</span>
+            <input v-if="showDatePicker" v-model="selectedDate" type="date" class="date-nav-picker" @change="showDatePicker = false" />
+            <button class="date-nav-arrow" :class="{ 'is-disabled': viewMode === 'day' && isToday }" :disabled="viewMode === 'day' && isToday" @click="goDay(1)" :title="fish.t('后一天')">&rsaquo;</button>
+            <button v-if="!isToday" class="date-nav-today" @click="selectedDate = todayISO(); viewMode = 'day'">{{ fish.t("回到今天") }}</button>
+          </div>
           <div class="panel-header">
             <div>
-              <p class="panel-kicker">Today</p>
-              <h3>{{ fish.t("今日完成") }}<template v-if="todayDoneTotal"> · {{ todayDoneTotal }}{{ fish.t("分钟") }}</template></h3>
+              <p class="panel-kicker">{{ isToday ? 'Today' : fish.t('回顾') }}</p>
+              <h3>{{ viewMode === 'day' ? fish.t("今日完成") : fish.t("本周完成") }}<template v-if="viewMode === 'day' ? doneTotal : weekTotal"> · {{ viewMode === 'day' ? doneTotal : weekTotal }}{{ fish.t("分钟") }}</template></h3>
+            </div>
+            <div class="segmented-control done-view-toggle">
+              <button :class="{ 'is-active': viewMode === 'day' }" @click="viewMode = 'day'">{{ fish.t("日") }}</button>
+              <button :class="{ 'is-active': viewMode === 'week' }" @click="viewMode = 'week'">{{ fish.t("周") }}</button>
             </div>
           </div>
-          <div v-if="todayTimeline.tasks.length" class="donelist-ios">
-            <div class="donelist-ios-labels">
-              <span v-for="h in todayTimeline.hours" :key="h" class="donelist-ios-label">{{ String(h).padStart(2, '0') }}:00</span>
-            </div>
-            <div class="donelist-ios-track" :style="{ height: todayTimeline.totalHeight + 'px' }">
-              <div v-for="h in todayTimeline.hours" :key="h" class="donelist-ios-line" :style="{ top: (h * 60 - todayTimeline.hours[0] * 60) + 'px' }"></div>
-              <div v-for="t in todayTimeline.tasks" :key="t.id" class="donelist-ios-task"
-                :class="{ 'is-selected': selectedTimelineTask?.id === t.id }"
-                :style="{
-                  top: t.top + 'px',
-                  height: t.height + 'px',
-                  left: t.leftPct + '%',
-                  width: 'calc(' + t.widthPct + '% - 6px)',
-                  background: subjectPinkMap[t.subject] || pinkPalette[0],
-                }"
-                @click="selectedTimelineTask = selectedTimelineTask?.id === t.id ? null : t">
-                <span class="donelist-ios-subject">{{ fish.subjectName(t.subject) }}</span>
-                <span v-if="props.fish.tx(t.note)" class="donelist-ios-note">{{ props.fish.tx(t.note) }}</span>
-                <span class="donelist-ios-time">{{ t.startTime }}{{ t.endTime ? ' - ' + t.endTime : '' }} · {{ t.minutes }}m</span>
+          <template v-if="viewMode === 'day'">
+            <div v-if="doneTimeline.tasks.length" class="donelist-ios">
+              <div class="donelist-ios-labels">
+                <span v-for="h in doneTimeline.hours" :key="h" class="donelist-ios-label">{{ String(h).padStart(2, '0') }}:00</span>
+              </div>
+              <div class="donelist-ios-track" :style="{ height: doneTimeline.totalHeight + 'px' }">
+                <div v-for="h in doneTimeline.hours" :key="h" class="donelist-ios-line" :style="{ top: (h * 60 - doneTimeline.hours[0] * 60) + 'px' }"></div>
+                <div v-for="t in doneTimeline.tasks" :key="t.id" class="donelist-ios-task"
+                  :class="{ 'is-selected': selectedTimelineTask?.id === t.id }"
+                  :style="{
+                    top: t.top + 'px',
+                    height: t.height + 'px',
+                    left: t.leftPct + '%',
+                    width: 'calc(' + t.widthPct + '% - 6px)',
+                    background: darkenHex(subjectPinkMap[t.subject] || pinkPalette[0], 0.2),
+                  }"
+                  @click="selectedTimelineTask = selectedTimelineTask?.id === t.id ? null : t">
+                  <span class="donelist-ios-subject">{{ fish.subjectName(t.subject) }}</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div v-if="selectedTimelineTask" class="timeline-detail">
-            <div class="timeline-detail-header">
-              <strong>{{ fish.subjectName(selectedTimelineTask.subject) }}</strong>
-              <span>{{ selectedTimelineTask.startTime }}{{ selectedTimelineTask.endTime ? ' - ' + selectedTimelineTask.endTime : '' }} · {{ selectedTimelineTask.minutes }}m</span>
-              <button class="timeline-detail-close" @click="selectedTimelineTask = null">&times;</button>
+            <div v-if="selectedTimelineTask" class="timeline-detail">
+              <div class="timeline-detail-header">
+                <strong>{{ fish.subjectName(selectedTimelineTask.subject) }}</strong>
+                <span>{{ selectedTimelineTask.startTime }}{{ selectedTimelineTask.endTime ? ' - ' + selectedTimelineTask.endTime : '' }} · {{ selectedTimelineTask.minutes }}m</span>
+                <button class="timeline-detail-close" @click="selectedTimelineTask = null">&times;</button>
+              </div>
+              <p v-if="props.fish.tx(selectedTimelineTask.note)">{{ props.fish.tx(selectedTimelineTask.note) }}</p>
+              <p v-else class="empty-note">{{ fish.t('暂无备注内容。') }}</p>
             </div>
-            <p v-if="props.fish.tx(selectedTimelineTask.note)">{{ props.fish.tx(selectedTimelineTask.note) }}</p>
-            <p v-else class="empty-note">{{ fish.t('暂无备注内容。') }}</p>
+            <p v-else-if="!doneTimeline.tasks.length" class="empty-note">{{ isToday ? fish.t("今天还没有完成番茄，开始一颗吧。") : fish.t("该天没有记录") }}</p>
+          </template>
+          <div v-else class="week-grid-wrap">
+            <div class="week-grid-headers">
+              <div class="week-grid-hour-spacer"></div>
+              <div v-for="day in weekGrid" :key="day.date"
+                class="week-grid-col-header"
+                :class="{ 'is-today': day.date === todayISO() }">
+                <span class="week-grid-col-day">{{ weekDayNames[new Date(day.date + 'T12:00:00').getDay()] }}</span>
+                <span class="week-grid-col-date">{{ formatShortDay(day.date) }}</span>
+                <span v-if="day.total" class="week-grid-col-total">{{ day.total }}m</span>
+              </div>
+            </div>
+            <div class="week-grid-body">
+              <div class="week-grid-hour-col">
+                <div v-for="hour in HOURS" :key="hour" class="week-grid-hour">{{ String(hour).padStart(2, '0') }}:00</div>
+              </div>
+              <div v-for="day in weekGrid" :key="day.date"
+                class="week-grid-col"
+                :class="{ 'is-today': day.date === todayISO() }">
+                <div class="week-grid-col-track" :style="{ height: 24 * PX_PER_HOUR_WEEK + 'px' }">
+                  <div v-for="hour in HOURS" :key="hour" class="week-grid-line"></div>
+                  <div v-for="log in day.logs" :key="log.id" class="week-grid-block"
+                    :style="{
+                      top: log.top + 'px',
+                      height: Math.max(log.height, 10) + 'px',
+                      background: (subjectTransparentMap[log.subject] || {}).bg || hexToRgba(pinkPalette[0], 0.22),
+                      borderColor: (subjectTransparentMap[log.subject] || {}).border || pinkPalette[0],
+                      color: (subjectTransparentMap[log.subject] || {}).text || pinkPalette[0],
+                    }"
+                    @click="selectedDate = day.date; viewMode = 'day'; selectedTimelineTask = log">
+                    <span class="week-grid-block-subject">{{ fish.subjectName(log.subject) }}</span>
+                    <span v-if="log.startTime && log.height > 18" class="week-grid-block-time">{{ log.startTime }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p v-if="!weekTotal" class="empty-note" style="padding:16px 0">{{ fish.t("本周暂无记录") }}</p>
           </div>
-          <p v-else-if="!todayTimeline.tasks.length" class="empty-note">{{ fish.t("今天还没有完成番茄，开始一颗吧。") }}</p>
         </section>
         <section class="panel sessions-panel">
-          <div class="panel-header"><div><p class="panel-kicker">Sessions</p><h3>{{ fish.t("计时学习记录") }}</h3></div><button class="small-button" type="button" @click="startAdd()">+ {{ fish.t("添加记录") }}</button></div>
+          <div class="panel-header"><div><p class="panel-kicker">Sessions</p><h3>{{ fish.t("计时学习记录") }} · {{ fish.t("近两天") }}</h3></div><button class="small-button" type="button" @click="startAdd()">+ {{ fish.t("添加记录") }}</button></div>
           <div class="item-list">
             <form v-if="addingNew" class="inline-edit-form" @submit.prevent="submitAdd()">
               <label>{{ fish.t("日期") }}<input v-model="addForm.date" type="date" /></label>
@@ -480,7 +754,7 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
               <label class="wide-field">{{ fish.t("内容") }}<input v-model="addForm.note" maxlength="60" /></label>
               <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="addingNew = false">{{ fish.t("取消") }}</button></div>
             </form>
-            <article v-for="log in fish.state.pomodoroLogs" :key="log.id" class="list-item">
+            <article v-for="log in recentTimerLogs" :key="log.id" class="list-item">
             <form v-if="editingId === log.id" class="inline-edit-form" @submit.prevent="saveEdit(log.id)">
               <label>{{ fish.t("科目") }}<select v-model="editForm.subject"><option v-for="s in timerSubjects" :key="s.id" :value="s.id">{{ fish.t(s.name) }}</option></select></label>
               <label>{{ fish.t("模式") }}<input v-model="editForm.mode" maxlength="20" /></label>
@@ -489,8 +763,10 @@ onBeforeUnmount(() => { window.clearInterval(interval); window.clearInterval(clo
               <label class="wide-field">{{ fish.t("内容") }}<input v-model="editForm.note" maxlength="60" /></label>
               <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="editingId = ''">{{ fish.t("取消") }}</button></div>
             </form>
-            <template v-else><div class="timer-log-body"><strong>{{ fish.subjectName(log.subject) }}</strong><small><template v-if="log.startTime">{{ log.startTime }} - {{ log.endTime }} · </template>{{ log.minutes }} {{ fish.t("分钟") }}</small><p :class="{ 'log-note-clamped': expandedLogId !== log.id }"><BilingualTextEditor :fish="fish" :value="log.note" @save="(text) => fish.updateTranslation('pomodoroLogs', log.id, 'note', text)" /></p></div><div class="row-actions"><button v-if="fish.tx(log.note) && fish.tx(log.note).length > 40" class="row-expand-btn" @click="toggleExpand(log.id)">{{ expandedLogId === log.id ? fish.t('收起') : fish.t('展开') }}</button><button @click="startEdit(log)">{{ fish.t("编辑") }}</button><button class="is-delete" @click="fish.deleteById('pomodoroLogs', log.id)">{{ fish.t("删除") }}</button></div></template>
-          </article></div>
+            <template v-else><div class="timer-log-body"><strong>{{ fish.subjectName(log.subject) }}</strong><small>{{ log.date }} · <template v-if="log.startTime">{{ log.startTime }} - {{ log.endTime }} · </template>{{ log.minutes }} {{ fish.t("分钟") }}</small><p :class="{ 'log-note-clamped': expandedLogId !== log.id }"><BilingualTextEditor :fish="fish" :value="log.note" @save="(text) => fish.updateTranslation('pomodoroLogs', log.id, 'note', text)" /></p></div><div class="row-actions"><button v-if="fish.tx(log.note) && fish.tx(log.note).length > 40" class="row-expand-btn" @click="toggleExpand(log.id)">{{ expandedLogId === log.id ? fish.t('收起') : fish.t('展开') }}</button><button @click="startEdit(log)">{{ fish.t("编辑") }}</button><button class="is-delete" @click="fish.deleteById('pomodoroLogs', log.id)">{{ fish.t("删除") }}</button></div></template>
+          </article>
+          <p v-if="!addingNew && !recentTimerLogs.length" class="empty-note">{{ fish.t("近两天暂无计时记录") }}</p>
+          </div>
         </section>
       </div>
     </div>

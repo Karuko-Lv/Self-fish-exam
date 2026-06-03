@@ -122,6 +122,39 @@ const taskLanes = computed(() => [
   { id: "burst", title: props.fish.t("冲刺计划"), hint: props.fish.t("状态好时加码"), tasks: props.fish.state.tasks.filter((task) => task.level === "burst") },
 ]);
 
+const todayCheckinItems = computed(() => (props.fish.state.dailyCheckins || []).filter((item) => item.active !== false));
+
+const todayCheckinRecords = computed(() => props.fish.state.dailyCheckinLogs?.[props.fish.today.value] || {});
+
+const todayCheckinStats = computed(() => {
+  const total = todayCheckinItems.value.length;
+  const done = todayCheckinItems.value.filter((item) => todayCheckinRecords.value[item.id]?.done).length;
+  return {
+    done,
+    total,
+    pct: total ? Math.round((done / total) * 100) : 0,
+  };
+});
+
+function checkinTargetText(item) {
+  const unit = props.fish.tx(item.unit);
+  if (item.kind === "check") return props.fish.t("完成一次");
+  if (Number(item.target || 0) > 0) return `${props.fish.t("至少")} ${item.target}${unit}`;
+  return unit ? `${props.fish.t("记录")} ${unit}` : props.fish.t("记录数值");
+}
+
+function checkinStatusText(item) {
+  const record = todayCheckinRecords.value[item.id];
+  const unit = props.fish.tx(item.unit);
+  if (record?.value) return `${record.value}${unit}`;
+  if (record?.done) return props.fish.t("已完成");
+  return checkinTargetText(item);
+}
+
+function toggleTodayCheckin(item) {
+  props.fish.toggleDailyCheckinRecord(props.fish.today.value, item.id);
+}
+
 onMounted(() => {
   clockTimer = window.setInterval(() => {
     now.value = new Date();
@@ -158,6 +191,34 @@ onBeforeUnmount(() => window.clearInterval(clockTimer));
           <p class="panel-kicker">{{ fish.t("距离目标") }}</p>
           <div class="countdown"><strong>{{ fish.daysLeft.value }}</strong><span>{{ fish.t("天") }}</span></div>
           <p class="daily-line">{{ fish.promptFor('dashboard') }}</p>
+          <div v-if="todayCheckinItems.length" class="dashboard-checkin-card">
+            <div class="dashboard-checkin-head">
+              <div>
+                <p class="panel-kicker">{{ fish.t("今日打卡") }}</p>
+                <strong>{{ todayCheckinStats.done }}/{{ todayCheckinStats.total }} · {{ todayCheckinStats.pct }}%</strong>
+              </div>
+              <span>{{ todayCheckinStats.done === todayCheckinStats.total ? fish.t("全部完成") : fish.t("继续推进") }}</span>
+            </div>
+            <div class="dashboard-checkin-track" aria-hidden="true">
+              <span :style="{ width: todayCheckinStats.pct + '%' }"></span>
+            </div>
+            <div class="dashboard-checkin-list">
+              <button
+                v-for="item in todayCheckinItems"
+                :key="item.id"
+                class="dashboard-checkin-item"
+                :class="{ 'is-done': todayCheckinRecords[item.id]?.done }"
+                type="button"
+                @click="toggleTodayCheckin(item)"
+              >
+                <span class="dashboard-checkin-mark">{{ todayCheckinRecords[item.id]?.done ? "✓" : "" }}</span>
+                <span class="dashboard-checkin-text">
+                  <strong>{{ fish.tx(item.title) }}</strong>
+                  <em>{{ checkinStatusText(item) }}</em>
+                </span>
+              </button>
+            </div>
+          </div>
           <div class="hero-stats">
             <div><strong>{{ fish.todayPractice.value }}</strong><span>{{ fish.t("今日刷题") }}</span></div>
             <div><strong>{{ fish.todaySentences.value }}</strong><span>{{ fish.t("今日长难句") }}</span></div>
@@ -268,6 +329,7 @@ onBeforeUnmount(() => window.clearInterval(clockTimer));
           </div>
         </section>
       </div>
+
     </div>
   </section>
 </template>

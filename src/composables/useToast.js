@@ -9,7 +9,7 @@ export function useToast() {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       message.value = "";
-    }, 2600);
+    }, 5000);
   }
 
   return { message, showToast };

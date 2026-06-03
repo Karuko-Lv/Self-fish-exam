@@ -1,0 +1,48 @@
+{
+  "active": true,
+  "current_phase": "deep-interview",
+  "state": {
+    "interview_id": "d7a3f8e2-4b1c-4a9d-b5e6-1f8c3d2a7b9e",
+    "type": "brownfield",
+    "initial_idea": "番茄分析多一个选择非学习和非学习之外的时间比展示的按钮",
+    "initial_context_summary": null,
+    "rounds": [],
+    "current_ambiguity": 1.0,
+    "threshold": 0.2,
+    "threshold_source": "default",
+    "codebase_context": {
+      "main_file": "src/views/TimerView.vue",
+      "analysis_panel_lines": "494-557",
+      "analysis_filtered_line": 332,
+      "analysis_stats_line": 341,
+      "subjects": ["ds", "co", "os", "net", "math1", "english1"],
+      "non_study_id": "nonStudy",
+      "current_filter_buttons": ["day", "week", "month", "custom"],
+      "i18n_file": "src/i18n/messages.js"
+    },
+    "topology": {
+      "status": "confirmed",
+      "confirmed_at": "2026-05-29T00:00:00Z",
+      "components": [
+        {
+          "id": "category-filter-toggle",
+          "name": "分类筛选切换",
+          "description": "在番茄分析面板增加按钮/控件，在现有逐科目明细视图与学习/非学习时间比例视图之间切换",
+          "status": "active",
+          "evidence": ["user confirmed single-component topology"],
+          "clarity_scores": {
+            "goal": null,
+            "constraints": null,
+            "criteria": null,
+            "context": null
+          },
+          "weakest_dimension": null
+        }
+      ],
+      "deferrals": [],
+      "last_targeted_component_id": null
+    },
+    "challenge_modes_used": [],
+    "ontology_snapshots": []
+  }
+}

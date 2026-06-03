@@ -1,10 +1,13 @@
 <script setup>
 import { computed, ref } from "vue";
+import { localStorageKeyForUser } from "../utils/state.js";
 import CountdownsView from "../views/CountdownsView.vue";
+import DailyCheckinView from "../views/DailyCheckinView.vue";
 import DashboardView from "../views/DashboardView.vue";
 import DistractionsView from "../views/DistractionsView.vue";
-import IdeasView from "../views/IdeasView.vue";
+import InspirationView from "../views/InspirationView.vue";
 import KnowledgeReviewView from "../views/KnowledgeReviewView.vue";
+import PlanView from "../views/PlanView.vue";
 import PracticeView from "../views/PracticeView.vue";
 import SentencesView from "../views/SentencesView.vue";
 import SettingsView from "../views/SettingsView.vue";
@@ -26,24 +29,39 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["logout"]);
-const activeView = ref("dashboard");
+
+function getInitialView() {
+  try {
+    const key = localStorageKeyForUser(props.user.id) + '.activeTimer';
+    const raw = localStorage.getItem(key);
+    if (!raw) return 'dashboard';
+    const active = JSON.parse(raw);
+    return active && active.running ? 'timer' : 'dashboard';
+  } catch {
+    return 'dashboard';
+  }
+}
+
+const activeView = ref(getInitialView());
 const avatarInput = ref(null);
 const avatarSrc = computed(() => props.fish.state.settings.avatarImage || "");
 const maxAvatarBytes = 2 * 1024 * 1024;
 
 const navItems = [
   ["dashboard", "今日泳池", "▣"],
+  ["plan", "计划栏", "▤"],
+  ["timer", "番茄钟", "◷"],
   ["countdowns", "倒数日", "D"],
   ["map", "全科进度", "⌁"],
   ["practice", "刷题记录", "#"],
   ["sentences", "长难句", "句"],
-  ["timer", "番茄钟", "◷"],
   ["distractions", "分心记录", "☆"],
   ["knowledgeReviews", "知识点复盘", "!"],
-  ["ideas", "灵感停车场", "+"],
+  ["dailyCheckins", "每日打卡", "✓"],
   ["examAnalysis", "考情分析", "§"],
   ["expense", "记账", "¥"],
   ["review", "周复盘", "∑"],
+  ["inspiration", "激励", "♥"],
   ["settings", "设置", "⚙"],
 ];
 
@@ -51,6 +69,7 @@ const currentComponent = computed(
   () =>
     ({
       dashboard: DashboardView,
+      plan: PlanView,
       countdowns: CountdownsView,
       map: SubjectMapView,
       practice: PracticeView,
@@ -58,7 +77,8 @@ const currentComponent = computed(
       timer: TimerView,
       distractions: DistractionsView,
       knowledgeReviews: KnowledgeReviewView,
-      ideas: IdeasView,
+      dailyCheckins: DailyCheckinView,
+      inspiration: InspirationView,
       examAnalysis: ExamAnalysisView,
       expense: ExpenseView,
       review: WeeklyReviewView,

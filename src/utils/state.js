@@ -1,6 +1,7 @@
 import {
   DEFAULT_EXAM_DATE,
   STORAGE_KEY_BASE,
+  defaultDailyCheckins,
   defaultTasks,
   defaultPromptCards,
   seedTopics,
@@ -206,6 +207,17 @@ function normalizeExpenses(input) {
   }));
 }
 
+function normalizeInspirations(items) {
+  return items.map((item, index) => ({
+    id: item.id || `inspiration-${index}`,
+    date: item.date || todayISO(),
+    createdAt: item.createdAt || new Date().toISOString(),
+    title: ensureBilingualText(item.title || ""),
+    content: ensureBilingualText(item.content || ""),
+    category: item.category || "梦想生活",
+  }));
+}
+
 function normalizeIdeas(ideas) {
   return ideas.map((idea, index) => ({
     id: idea.id || `idea-${index}`,
@@ -217,21 +229,189 @@ function normalizeIdeas(ideas) {
   }));
 }
 
+function normalizeDailyCheckins(input) {
+  const source = Array.isArray(input) && input.length ? input : defaultDailyCheckins;
+  return source
+    .map((item, index) => ({
+      id: item.id || `daily-checkin-${index}`,
+      createdAt: item.createdAt || new Date().toISOString(),
+      title: ensureBilingualText(item.title || ""),
+      kind: item.kind === "check" ? "check" : "number",
+      target: Number(item.target || 0),
+      unit: ensureBilingualText(item.unit || ""),
+      active: item.active !== false,
+    }))
+    .filter((item) => item.title.zh || item.title.en);
+}
+
+function normalizeDailyCheckinLogs(input = {}) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  return Object.fromEntries(
+    Object.entries(source).map(([date, records]) => {
+      const dayRecords = records && typeof records === "object" && !Array.isArray(records) ? records : {};
+      return [
+        date,
+        Object.fromEntries(
+          Object.entries(dayRecords).map(([itemId, record]) => [
+            itemId,
+            {
+              itemId,
+              date,
+              createdAt: record?.createdAt || new Date().toISOString(),
+              updatedAt: record?.updatedAt || record?.createdAt || new Date().toISOString(),
+              done: Boolean(record?.done),
+              value: record?.value == null ? "" : String(record.value),
+              note: ensureBilingualText(record?.note || ""),
+            },
+          ]),
+        ),
+      ];
+    }),
+  );
+}
+
+function normalizePlanDayCount(value) {
+  const count = Math.floor(Number(value || 0));
+  if (!Number.isFinite(count)) return 0;
+  return Math.min(120, Math.max(0, count));
+}
+
+function normalizePagedPlan(input = {}) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const sourcePages = Array.isArray(source.pages) ? source.pages : [];
+  const days = normalizePlanDayCount(source.days == null ? sourcePages.length : source.days);
+  const pages = sourcePages.slice(0, days || sourcePages.length).map((page, index) => {
+    const day = normalizePlanDayCount(page?.day) || index + 1;
+    const todos = Array.isArray(page?.todos)
+      ? page.todos
+          .map((todo, todoIndex) => ({
+            id: todo.id || `${page?.id || `plan-page-${index}`}-todo-${todoIndex}`,
+            text: ensureBilingualText(todo.text || ""),
+            done: Boolean(todo.done),
+          }))
+          .filter((todo) => todo.text.zh || todo.text.en)
+      : [];
+    return {
+      id: page?.id || `plan-page-${index}`,
+      day,
+      title: ensureBilingualText(page?.title || `第 ${day} 天计划`),
+      goal: ensureBilingualText(page?.goal || ""),
+      tasks: ensureBilingualText(page?.tasks || ""),
+      output: ensureBilingualText(page?.output || ""),
+      todos,
+      done: Boolean(page?.done),
+    };
+  });
+
+  return {
+    days: days || pages.length,
+    generatedAt: source.generatedAt || "",
+    pages,
+  };
+}
+
 function normalizeAvatarImage(value) {
   return typeof value === "string" && value.startsWith("data:image/") ? value : "";
+}
+
+function normalizeSubjectOutputs(input = {}) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const outputs = {};
+  subjects.forEach((subject) => {
+    const subjectSource = source[subject.id];
+    outputs[subject.id] = {};
+    if (!subjectSource || typeof subjectSource !== "object" || Array.isArray(subjectSource)) return;
+
+    Object.entries(subjectSource).forEach(([branchId, entries]) => {
+      outputs[subject.id][branchId] = Array.isArray(entries)
+        ? entries
+            .map((entry, index) => ({
+              id: entry.id || `${subject.id}-${branchId}-output-${index}`,
+              date: entry.date || todayISO(),
+              createdAt: entry.createdAt || new Date().toISOString(),
+              type: entry.type || "concept",
+              topicId: typeof entry.topicId === "string" ? entry.topicId : "",
+              note: ensureBilingualText(entry.note || ""),
+            }))
+            .filter((entry) => entry.note.zh || entry.note.en)
+        : [];
+    });
+  });
+  return outputs;
+}
+
+function normalizeCustomBranches(input = {}) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const result = {};
+  subjects.forEach((s) => {
+    const arr = Array.isArray(source[s.id]) ? source[s.id] : [];
+    result[s.id] = arr
+      .map((b, i) => ({
+        id: b.id || `custom-branch-${s.id}-${i}`,
+        label: ensureBilingualText(b.label || ""),
+        topics: Array.isArray(b.topics) ? b.topics.filter((tid) => typeof tid === "string") : [],
+      }))
+      .filter((b) => b.label.zh || b.label.en);
+  });
+  return result;
 }
 
 export function normalizeState(input = {}) {
   const topicState = {};
   subjects.forEach((subject) => {
-    topicState[subject.id] = (seedTopics[subject.id] || []).map((name, index) => {
-      const saved = input.topicState?.[subject.id]?.[index];
+    const seeds = seedTopics[subject.id] || [];
+    const savedArr = Array.isArray(input.topicState?.[subject.id])
+      ? input.topicState[subject.id]
+      : [];
+
+    // Build seed topics by index (backward-compatible)
+    const topics = seeds.map((name, index) => {
+      const saved = savedArr[index];
+      const reviewLog = Array.isArray(saved?.reviewLog)
+        ? saved.reviewLog.map((entry, ri) => ({
+            id: entry.id || `${subject.id}-${index}-review-${ri}`,
+            date: entry.date || todayISO(),
+            createdAt: entry.createdAt || new Date().toISOString(),
+            note: ensureBilingualText(entry.note || ""),
+            errorCauses: Array.isArray(entry.errorCauses) ? entry.errorCauses : [],
+            questionTypes: Array.isArray(entry.questionTypes) ? entry.questionTypes : [],
+            result: entry.result || "",
+          }))
+        : [];
       return {
         id: `${subject.id}-${index}`,
         name,
         status: saved?.status || (index === 0 ? "basic" : "empty"),
+        reviewLog,
       };
     });
+
+    // Preserve custom topics (beyond seed count) from saved data
+    for (let i = seeds.length; i < savedArr.length; i++) {
+      const saved = savedArr[i];
+      if (!saved || !saved.name) continue;
+      const reviewLog = Array.isArray(saved.reviewLog)
+        ? saved.reviewLog.map((entry, ri) => ({
+            id: entry.id || `${(saved.id || "custom")}-review-${ri}`,
+            date: entry.date || todayISO(),
+            createdAt: entry.createdAt || new Date().toISOString(),
+            note: ensureBilingualText(entry.note || ""),
+            errorCauses: Array.isArray(entry.errorCauses) ? entry.errorCauses : [],
+            questionTypes: Array.isArray(entry.questionTypes) ? entry.questionTypes : [],
+            result: entry.result || "",
+          }))
+        : [];
+      topics.push({
+        id: saved.id || uid("topic"),
+        name: saved.name,
+        status: saved.status || "empty",
+        branchId: typeof saved.branchId === "string" ? saved.branchId : undefined,
+        parentId: typeof saved.parentId === "string" ? saved.parentId : undefined,
+        reviewLog,
+      });
+    }
+
+    topicState[subject.id] = topics;
   });
 
   const sentenceLogs = Array.isArray(input.sentenceLogs)
@@ -246,6 +426,8 @@ export function normalizeState(input = {}) {
     tasks: normalizeTasks(Array.isArray(input.tasks) && input.tasks.length ? input.tasks : structuredClone(defaultTasks)),
     taskDate: input.taskDate || todayISO(),
     topicState,
+    customBranches: normalizeCustomBranches(input.customBranches),
+    subjectOutputs: normalizeSubjectOutputs(input.subjectOutputs),
     practiceLogs: Array.isArray(input.practiceLogs) ? normalizePracticeLogs(input.practiceLogs) : [],
     sentenceLogs,
     focusLogs: Array.isArray(input.focusLogs) ? normalizeFocusLogs(input.focusLogs) : [],
@@ -255,6 +437,10 @@ export function normalizeState(input = {}) {
     examAnalyses: normalizeExamAnalyses(input.examAnalyses),
     expenses: normalizeExpenses(input.expenses),
     ideas: Array.isArray(input.ideas) ? normalizeIdeas(input.ideas) : [],
+    inspirations: Array.isArray(input.inspirations) ? normalizeInspirations(input.inspirations) : [],
+    dailyCheckins: normalizeDailyCheckins(input.dailyCheckins),
+    dailyCheckinLogs: normalizeDailyCheckinLogs(input.dailyCheckinLogs),
+    pagedPlan: normalizePagedPlan(input.pagedPlan),
     countdownEvents: normalizeCountdownEvents(
       Array.isArray(input.countdownEvents) && input.countdownEvents.length
         ? input.countdownEvents

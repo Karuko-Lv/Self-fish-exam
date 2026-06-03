@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from "vue";
 import BilingualTextEditor from "../components/BilingualTextEditor.vue";
 import ExportActions from "../components/ExportActions.vue";
+import { handleBoldKeydown } from "../utils/textFormat.js";
 
 const props = defineProps({ fish: { type: Object, required: true } });
 const form = reactive({ text: "", source: "", note: "", screenshot: "", words: [] });
@@ -101,14 +102,14 @@ function saveEdit(id) {
 
 <template>
   <section class="page-view">
-    <div class="topbar"><div><p class="eyebrow">Sentence</p><h2>{{ fish.t("长难句") }}</h2></div><div class="topbar-actions"><span class="metric-pill">{{ fish.t("今日") }} {{ fish.todaySentences.value }} {{ fish.t("句") }}</span><ExportActions :title="fish.t('长难句仓库')" :payload="props.fish.state.sentenceLogs" :rows="props.fish.state.sentenceLogs.map((log) => ({ [fish.t('日期')]: log.date, [fish.t('来源')]: fish.tx(log.source), [fish.t('原句')]: fish.tx(log.text), [fish.t('拆解')]: fish.tx(log.note) }))" /></div></div>
+    <div class="topbar"><div><p class="eyebrow">Sentence</p><h2>{{ fish.t("长难句") }}</h2></div><div class="topbar-actions"><span class="metric-pill">{{ fish.t("今日") }} {{ fish.todaySentences.value }} {{ fish.t("句") }}</span><ExportActions :title="fish.t('长难句仓库')" :payload="props.fish.state.sentenceLogs" :rows="props.fish.state.sentenceLogs.map((log) => ({ [fish.t('日期')]: log.date, [fish.t('来源')]: fish.tx(log.source), [fish.t('原句')]: fish.tx(log.text), [fish.t('拆解')]: fish.tx(log.note), [fish.t('截图')]: log.screenshot || '' }))" /></div></div>
     <div class="split-layout">
       <section class="panel">
         <p class="panel-kicker">Daily</p><h3>{{ fish.t("今天至少一句") }}</h3>
         <form class="stack-form" @submit.prevent="submit">
-          <label>{{ fish.t("原句") }}<textarea v-model="form.text" rows="5" maxlength="600" required></textarea></label>
+          <label>{{ fish.t("原句") }}<textarea v-model="form.text" rows="5" maxlength="600" required @keydown="handleBoldKeydown"></textarea></label>
           <label>{{ fish.t("来源") }}<input v-model="form.source" maxlength="70" /></label>
-          <label>{{ fish.t("拆解 / 翻译 / 卡点") }}<textarea v-model="form.note" rows="5"></textarea></label>
+          <label>{{ fish.t("拆解 / 翻译 / 卡点") }}<textarea v-model="form.note" rows="5" @keydown="handleBoldKeydown"></textarea></label>
           <div class="word-section">
             <p class="word-section-title">{{ fish.t("生词") }}</p>
             <div class="word-input-row">
@@ -136,9 +137,9 @@ function saveEdit(id) {
         <div class="item-list">
           <article v-for="log in pagedLogs" :key="log.id" class="list-item sentence-item">
             <form v-if="editingId === log.id" class="inline-edit-form" @submit.prevent="saveEdit(log.id)">
-              <label>{{ fish.t("原句") }}<textarea v-model="editForm.text" rows="4" maxlength="600" required></textarea></label>
+              <label>{{ fish.t("原句") }}<textarea v-model="editForm.text" rows="4" maxlength="600" required @keydown="handleBoldKeydown"></textarea></label>
               <label>{{ fish.t("来源") }}<input v-model="editForm.source" maxlength="70" /></label>
-              <label class="wide-field">{{ fish.t("拆解 / 翻译 / 卡点") }}<textarea v-model="editForm.note" rows="4"></textarea></label>
+              <label class="wide-field">{{ fish.t("拆解 / 翻译 / 卡点") }}<textarea v-model="editForm.note" rows="4" @keydown="handleBoldKeydown"></textarea></label>
               <div class="word-section wide-field">
                 <p class="word-section-title">{{ fish.t("生词") }}</p>
                 <div class="word-input-row">
@@ -155,7 +156,7 @@ function saveEdit(id) {
               <div class="row-actions wide-field"><button class="primary-button">{{ fish.t("保存") }}</button><button class="secondary-button" type="button" @click="editingId = ''; editPreviewName = ''">{{ fish.t("取消") }}</button></div>
             </form>
             <template v-else>
-              <div class="sentence-body"><strong><BilingualTextEditor :fish="fish" :value="log.source" @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'source', text)" /></strong><p><BilingualTextEditor :fish="fish" :value="log.text" textarea @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'text', text)" /></p><small><BilingualTextEditor :fish="fish" :value="log.note" textarea @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'note', text)" /></small><ul v-if="log.words?.length" class="vocab-list"><li v-for="(w, idx) in log.words" :key="idx" class="vocab-item"><span class="vocab-word">{{ w.word }}</span><span v-if="w.note && !hideWordDefs" class="vocab-def">{{ w.note }}</span></li></ul><img v-if="log.screenshot" :src="log.screenshot" :alt="fish.t('长难句截图')" /></div>
+              <div class="sentence-body"><strong><BilingualTextEditor :fish="fish" :value="log.source" @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'source', text)" /></strong><p><BilingualTextEditor :fish="fish" :value="log.text" textarea @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'text', text)" v-slot="{ text }"><span v-html="fish.renderBold(text)"></span></BilingualTextEditor></p><small><BilingualTextEditor :fish="fish" :value="log.note" textarea @save="(text) => fish.updateTranslation('sentenceLogs', log.id, 'note', text)" v-slot="{ text }"><span v-html="fish.renderBold(text)"></span></BilingualTextEditor></small><ul v-if="log.words?.length" class="vocab-list"><li v-for="(w, idx) in log.words" :key="idx" class="vocab-item"><span class="vocab-word">{{ w.word }}</span><span v-if="w.note && !hideWordDefs" class="vocab-def">{{ w.note }}</span></li></ul><img v-if="log.screenshot" :src="log.screenshot" :alt="fish.t('长难句截图')" /></div>
               <div class="row-actions"><button type="button" @click="startEdit(log)">{{ fish.t("编辑") }}</button><button type="button" class="is-delete" @click="fish.deleteById('sentenceLogs', log.id)">{{ fish.t("删除") }}</button></div>
             </template>
           </article>

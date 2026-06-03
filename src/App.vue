@@ -10,6 +10,7 @@ import { useToast } from "./composables/useToast.js";
 const toast = useToast();
 const auth = useAuth(toast.showToast);
 const fish = useSelfFishState(auth.user, toast.showToast);
+if (typeof window !== 'undefined') window.__testToast = (msg) => fish.notify(msg || 'test toast from console');
 
 onMounted(async () => {
   await auth.checkSession();

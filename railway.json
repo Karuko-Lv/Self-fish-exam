@@ -2,7 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "deploy": {
     "buildCommand": "npm ci --include=dev && npm run build",
-    "startCommand": "npm start",
+    "startCommand": "npm start --quiet",
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10

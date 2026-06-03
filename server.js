@@ -312,7 +312,7 @@ async function handleApi(request, response, users = defaultUsers()) {
   const host = request.headers.host || "localhost";
   const pathname = new URL(request.url, `http://${host}`).pathname;
 
-  if (pathname === "/api/health" && request.method === "GET") {
+  if (pathname === "/api/health") {
     sendJson(response, 200, { ok: true });
     return;
   }
@@ -415,7 +415,9 @@ function createAppServer(users = defaultUsers()) {
 }
 
 function startServer() {
+  console.log("BOOT: starting server...");
   const users = defaultUsers();
+  console.log("BOOT: users configured, creating server...");
   const server = createAppServer(users);
 
   process.on("uncaughtException", (error) => {

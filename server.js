@@ -396,6 +396,7 @@ async function handleStatic(request, response) {
 function createAppServer(users = defaultUsers()) {
   return http.createServer(async (request, response) => {
     try {
+      console.log(`${request.method} ${request.url}`);
       if (request.url.startsWith("/api/")) {
         await handleApi(request, response, users);
         return;
@@ -417,6 +418,15 @@ function startServer() {
   const users = defaultUsers();
   const server = createAppServer(users);
 
+  process.on("uncaughtException", (error) => {
+    console.error("FATAL uncaughtException:", error);
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("FATAL unhandledRejection:", reason);
+    process.exit(1);
+  });
+
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE") {
       console.error(`Port ${PORT} is already in use.`);
@@ -429,8 +439,8 @@ function startServer() {
     process.exit(1);
   });
 
-  server.listen(PORT, () => {
-    console.log(`Self-fish is running at http://localhost:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`Self-fish is running at http://0.0.0.0:${PORT}`);
     console.log(`Data directory: ${DATA_DIR}`);
     console.log(`Configured users: ${users.map((user) => user.username).join(", ")}`);
   });

@@ -309,7 +309,8 @@ async function handleState(request, response, users) {
 }
 
 async function handleApi(request, response, users = defaultUsers()) {
-  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+  const host = request.headers.host || "localhost";
+  const pathname = new URL(request.url, `http://${host}`).pathname;
 
   if (pathname === "/api/health" && request.method === "GET") {
     sendJson(response, 200, { ok: true });
@@ -349,7 +350,8 @@ async function fileExists(filePath) {
 }
 
 async function handleStatic(request, response) {
-  const pathname = decodeURIComponent(new URL(request.url, `http://${request.headers.host}`).pathname);
+  const host = request.headers.host || "localhost";
+  const pathname = decodeURIComponent(new URL(request.url, `http://${host}`).pathname);
   const distDir = path.join(ROOT_DIR, "dist");
   const hasDist = await fileExists(path.join(distDir, "index.html"));
 
